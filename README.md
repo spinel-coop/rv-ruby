@@ -37,6 +37,20 @@ brew pr-upload --upload-only --root-url=https://github.com/spinel-coop/rv-ruby/r
 where `$VERSION` is the new package version.
 </details>
 
+### Developing locally
+<details>
+
+<summary>Steps for developing locally are documented below</summary>
+
+```sh
+# make sure you have Homebrew installed 
+git clone https://github.com/spinel-coop/rv-ruby
+git tap <any_arbitrary_username>/portable-packages ./rv-ruby
+# the commands in this package are now available
+brew portable-package ruby
+```
+</details>
+
 ## Thanks
 
 Thanks to the [Homebrew](https://brew.sh) team for the [portable-ruby](https://github.com/Homebrew/homebrew-portable-ruby) code we used as a starting point.
