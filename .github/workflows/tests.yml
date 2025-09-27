@@ -20,6 +20,28 @@ jobs:
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@main
       - run: brew test-bot --only-tap-syntax
+   
+  validate-bin-setup:
+    name: "Validate that bin/setup runs successfully"
+    strategy:
+      matrix:
+        runner:
+          - macos-13 # intel
+          - macos-14 # arm
+          - ubuntu-22.04
+          - ubuntu-22.04-arm
+      fail-fast: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@main
+      - name: Set up Homebrew
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+      - name: Run bin/setup
+        run: |
+          bin/setup
 
   # list_edited_formulas:
   # build_edited_formulas:
