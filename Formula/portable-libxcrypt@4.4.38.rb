@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableLibxcrypt < PortableFormula
+class PortableLibxcryptAT4438 < PortableFormula
   desc "Extended crypt library for descrypt, md5crypt, bcrypt, and others"
   homepage "https://github.com/besser82/libxcrypt"
   url "https://github.com/besser82/libxcrypt/releases/download/v4.4.38/libxcrypt-4.4.38.tar.xz"

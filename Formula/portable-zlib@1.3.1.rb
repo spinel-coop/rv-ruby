@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableZlib < PortableFormula
+class PortableZlibAT131 < PortableFormula
   desc "General-purpose lossless data-compression library"
   homepage "https://zlib.net/"
   url "https://zlib.net/zlib-1.3.1.tar.gz"

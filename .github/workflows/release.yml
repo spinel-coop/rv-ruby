@@ -11,47 +11,41 @@ permissions:
   contents: read
 
 jobs:
-  determine-tag:
+  setup:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.determine-tag.outputs.tag }}
+      formulas: ${{ steps.setup.outputs.formulas }}
+      date: ${{ steps.setup.outputs.date }}
     steps:
       - uses: actions/checkout@main
-      - name: Install Homebrew
+      - run: date
+      - run: date +%Y%m%d
+      - id: setup
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew tap spinel-coop/rv-ruby .
-
-      - name: Determine tag
-        id: determine-tag
-        run: |
-          brew ruby -e "$(cat<<EOS
-          require "formula"
-
-          tag = Formula["portable-ruby"].pkg_version.to_s
-
-          existing_tag = Utils.safe_popen_read("git", "tag", "--list", tag)
-          raise "Tag #{tag} already exists" if existing_tag.present?
-
-          puts "Preparing for #{tag} release."
-          File.open(ENV["GITHUB_OUTPUT"], "a") { |f| f.puts "tag=#{tag}" }
-          EOS
-          )"
+          cd Formula
+          list=$(ls rv-ruby* | jq --raw-input | jq --slurp --compact-output 'map(. |= .[:-3])')
+          list='["rv-ruby@3.4.5"]'
+          echo formulas=$list >> "$GITHUB_OUTPUT"
+          echo "date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: determine-tag
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        formula: ${{ fromJSON(needs.setup.outputs.formulas) }}
     uses: ./.github/workflows/build.yml
+    with:
+      formula: ${{ matrix.formula }}
 
   release:
-    needs: [determine-tag, build]
+    needs: [setup, build]
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ needs.determine-tag.outputs.tag }}
     permissions:
       contents: write
       packages: write
+    env:
+      TAG: ${{ needs.setup.outputs.date }}
     steps:
       - uses: actions/checkout@main
       - name: Install Homebrew
@@ -80,18 +74,18 @@ jobs:
           path: bottles
           merge-multiple: true
 
-      # - name: Upload to GitHub Packages
-      #   working-directory: bottles
-      #   env:
-      #     HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
-      #     HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
-      #   run: brew pr-upload --debug --upload-only --root-url="https://ghcr.io/v2/${GITHUB_REPOSITORY_OWNER,,}/rv-ruby"
+      - name: Upload to GitHub Packages
+        working-directory: bottles
+        env:
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+        run: brew pr-upload --debug --upload-only --root-url="https://ghcr.io/v2/${GITHUB_REPOSITORY,,}"
 
       - name: Push tag
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${TAG}" --notes "rv Ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}"
+          gh release create "${TAG}" --notes "rv ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}"
 
       - name: Upload to GitHub Releases
         working-directory: bottles

@@ -2,6 +2,10 @@ name: Build
 
 on:
   workflow_call:
+    inputs:
+      formula:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -9,22 +13,18 @@ permissions:
 env:
   HOMEBREW_DEVELOPER: 1
   HOMEBREW_NO_AUTO_UPDATE: 1
-  HOMEBREW_ARM64_TESTING: 1
 
 jobs:
   build:
     strategy:
       matrix:
-        include:
-          - os: macos-14
-          - os: ubuntu-22.04
-          - os: ubuntu-22.04-arm
+        runner:
+          - macos-13 # intel
+          - macos-14 # arm
+          - ubuntu-22.04
+          - ubuntu-22.04-arm
       fail-fast: false
-    runs-on: ${{matrix.os}}
-    container: ${{matrix.container && fromJSON(matrix.container) || ''}}
-    defaults:
-      run:
-        working-directory: ${{matrix.workdir || github.workspace}}
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@main
       - name: Install Homebrew
@@ -34,22 +34,28 @@ jobs:
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           brew tap spinel-coop/rv-ruby .
 
-      - name: Build Portable Ruby
+      - name: Build rv Ruby
         run: |
+          if [[ "${{ runner.arch }}" == "ARM64" ]]; then
+            export HOMEBREW_ARM64_TESTING=1
+          fi
           mkdir -p bottle/
           cd bottle
-          brew portable-package --verbose portable-ruby
+          brew portable-package --verbose --with-yjit ${{ inputs.formula }}
 
-      - name: Upload Portable Ruby
+      - name: Upload rv Ruby
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: bottles_${{matrix.os}}
-          path: ${{matrix.workdir || github.workspace}}/bottle
+          name: bottles_${{ inputs.formula }}_${{ matrix.runner }}
+          path: ${{github.workspace}}/bottle
 
-      - name: Test Portable Ruby
+      - name: Test rv Ruby
         run: |
+          if [[ "${{ runner.arch }}" == "ARM64" ]]; then
+            export HOMEBREW_ARM64_TESTING=1
+          fi
           mkdir -p portable-ruby/
-          tar --strip-components 2 -C portable-ruby -xf bottle/portable-ruby--*.tar.gz
+          tar --strip-components 2 -C rv-ruby -xf bottle/ruby*.tar.gz
           export PATH="${PWD}/portable-ruby/bin:${PATH}"
           export HOMEBREW_USE_RUBY_FROM_PATH=1
           rm -rf "$(brew --repo)/Library/Homebrew/vendor/portable-ruby"

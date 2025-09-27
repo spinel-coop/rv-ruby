@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableLibyaml < PortableFormula
+class PortableLibyamlAT025 < PortableFormula
   desc "YAML Parser"
   homepage "https://github.com/yaml/libyaml"
   url "https://github.com/yaml/libyaml/releases/download/0.2.5/yaml-0.2.5.tar.gz"

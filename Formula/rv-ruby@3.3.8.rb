@@ -1,10 +1,10 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableRuby < PortableFormula
+class RvRubyAT338 < PortableFormula
   desc "Powerful, clean, object-oriented scripting language"
   homepage "https://www.ruby-lang.org/"
-  url "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.5.tar.gz"
-  sha256 "1d88d8a27b442fdde4aa06dc99e86b0bbf0b288963d8433112dd5fac798fd5ee"
+  url "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.8.tar.gz"
+  sha256 "5ae28a87a59a3e4ad66bc2931d232dbab953d0aa8f6baf3bc4f8f80977c89cab"
   license "Ruby"
 
   # This regex restricts matching to versions other than X.Y.0.
@@ -36,8 +36,8 @@ class PortableRuby < PortableFormula
   end
 
   resource "bootsnap" do
-    url "https://rubygems.org/downloads/bootsnap-1.18.6.gem"
-    sha256 "0ae2393c1e911e38be0f24e9173e7be570c3650128251bf06240046f84a07d00"
+    url "https://rubygems.org/downloads/bootsnap-1.18.4.gem"
+    sha256 "ac4c42af397f7ee15521820198daeff545e4c360d2772c601fbdc2c07d92af55"
 
     livecheck do
       url "https://rubygems.org/api/v1/versions/bootsnap.json"
@@ -48,9 +48,16 @@ class PortableRuby < PortableFormula
   end
 
   def install
-    bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
-      line.blank? || line.start_with?("#")
+    # Remove almost all bundled gems and replace with our own set.
+    rm_r ".bundle"
+    allowed_gems = ["debug"]
+    bundled_gems = File.foreach("gems/bundled_gems").select do |line|
+      line.blank? || line.start_with?("#") || allowed_gems.any? { |gem| line.match?(/\A#{Regexp.escape(gem)}\s/) }
     end
+    rm_r(Dir["gems/*.gem"].reject do |gem_path|
+      gem_basename = File.basename(gem_path)
+      allowed_gems.any? { |gem| gem_basename.match?(/\A#{Regexp.escape(gem)}-\d/) }
+    end)
     resources.each do |resource|
       resource.stage "gems"
       bundled_gems << "#{resource.name} #{resource.version}\n"
@@ -157,7 +164,7 @@ class PortableRuby < PortableFormula
       shell_output("#{ruby} -rzlib -e 'puts Zlib.crc32(\"test\")'").chomp
     assert_equal " \t\n`><=;|&{(",
       shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
-    assert_equal '{"a" => "b"}',
+    assert_equal '{"a"=>"b"}',
       shell_output("#{ruby} -ryaml -e 'puts YAML.load(\"a: b\")'").chomp
     assert_equal "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       shell_output("#{ruby} -ropenssl -e 'puts OpenSSL::Digest::SHA256.hexdigest(\"\")'").chomp

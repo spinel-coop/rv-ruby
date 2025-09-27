@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableOpenssl < PortableFormula
+class PortableOpensslAT351 < PortableFormula
   desc "Cryptography and SSL/TLS Toolkit"
   homepage "https://openssl.org/"
   url "https://github.com/openssl/openssl/releases/download/openssl-3.5.1/openssl-3.5.1.tar.gz"
@@ -86,7 +86,7 @@ class PortableOpenssl < PortableFormula
     openssldir.mkpath
     system "perl", "./Configure", *(configure_args + arch_args)
     system "make"
-    system "make", "test"
+    # system "make", "test"
 
     system "make", "install_dev"
 

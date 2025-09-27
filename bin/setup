@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+set -vx
+
+brew tap spinel-coop/rv-ruby-dev .
+rm -rf "$(brew --prefix)/Library/Taps/spinel-coop/homebrew-rv-ruby-dev"
+ln -sf "$(pwd)" "$(brew --prefix)/Library/Taps/spinel-coop/homebrew-rv-ruby-dev"
