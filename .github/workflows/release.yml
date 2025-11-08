@@ -84,13 +84,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${TAG}" --notes "rv ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}"
+          gh release create "${TAG}" --notes "rv ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}" --draft
 
       - name: Upload to GitHub Releases
         working-directory: rubies
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
         run: brew rv-upload --debug --root-url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "${TAG}" --draft=false
 
       - name: Cleanup
         run: rm -rvf rubies
