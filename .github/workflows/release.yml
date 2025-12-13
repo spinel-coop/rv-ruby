@@ -8,6 +8,11 @@ on:
         description: 'Ruby version to release (e.g., 3.4.7)'
         required: true
         type: string
+      latest:
+        description: 'Mark as latest release'
+        required: false
+        type: boolean
+        default: false
 
 env:
   HOMEBREW_DEVELOPER: 1
@@ -92,11 +97,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          latest_flag=""
+          if [[ "${{ inputs.latest }}" == "true" ]]; then
+            latest_flag="--latest"
+          fi
           gh release create "${VERSION}" \
             --notes "Ruby ${VERSION} portable binaries" \
             --target "$(git rev-parse --verify HEAD)" \
             --title "${VERSION}" \
-            --latest
+            $latest_flag
 
       - name: Upload to GitHub Releases
         working-directory: rubies
