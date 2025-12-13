@@ -44,9 +44,7 @@ where `$VERSION` is the new package version.
 
 ## Thanks
 
-Thanks to [spinel-coop](https://github.com/spinel-coop/rv-ruby) for the rv-ruby project this was forked from.
-
-Thanks to the [Homebrew](https://brew.sh) team for the [portable-ruby](https://github.com/Homebrew/homebrew-portable-ruby) code we used as a starting point.
+Forked from [spinel-coop/rv-ruby](https://github.com/spinel-coop/rv-ruby), which was based on [Homebrew/homebrew-portable-ruby](https://github.com/Homebrew/homebrew-portable-ruby).
 
 ## License
 
