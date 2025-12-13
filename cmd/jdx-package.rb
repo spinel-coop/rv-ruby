@@ -96,7 +96,7 @@ module Homebrew
           json = File.read j
           json.gsub! "#{name}--", "ruby-"
           json.gsub! /-HEAD-[a-f0-9]+/, ""
-          json.gsub!(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
+          json.gsub!(/\.(arm64|x86_64)_(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
           json.gsub!(".bottle.", yjit_tag)
           json.gsub! ERB::Util.url_encode(name), "ruby"
           hash = JSON.parse(json)
@@ -109,7 +109,7 @@ module Homebrew
           # Rename JSON file to match tarball naming
           new_json = j.gsub("#{name}--", "ruby-")
           new_json = new_json.gsub(/-HEAD-[a-f0-9]+/, "")
-          new_json = new_json.gsub(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
+          new_json = new_json.gsub(/\.(arm64|x86_64)_(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
           new_json = new_json.gsub(".bottle.", yjit_tag)
           File.write new_json, JSON.generate(hash)
           FileUtils.rm_f j if j != new_json
@@ -118,7 +118,7 @@ module Homebrew
         Dir.glob("#{name}*.tar.gz").each do |f|
           r = f.gsub("#{name}--", "ruby-")
           r = r.gsub /-HEAD-[a-f0-9]+/, "-dev"
-          r = r.gsub(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
+          r = r.gsub(/\.(arm64|x86_64)_(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
           r = r.gsub(".bottle.", yjit_tag)
 
           # Repack tarball with flattened structure (strip one directory level)

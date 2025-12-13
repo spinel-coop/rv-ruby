@@ -102,7 +102,7 @@ jobs:
           gh release create "${VERSION}" \
             --notes "Ruby ${VERSION} portable binaries" \
             --target "$(git rev-parse --verify HEAD)" \
-            --title "Ruby ${VERSION}" \
+            --title "${VERSION}" \
             --latest
 
       - name: Upload to GitHub Releases
