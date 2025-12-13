@@ -1,0 +1,53 @@
+name: Release New Versions
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run daily after autobump (which runs at midnight)
+    - cron: "30 0 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Find versions without releases
+        id: find-versions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Get all formula versions (extract version from jdx-ruby@X.Y.Z.rb)
+          formula_versions=$(ls Formula/jdx-ruby@*.rb | sed 's/Formula\/jdx-ruby@//; s/\.rb//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
+
+          # Get existing releases
+          existing_releases=$(gh release list --limit 100 --json tagName --jq '.[].tagName' || true)
+
+          # Find versions without releases
+          missing=""
+          for version in $formula_versions; do
+            if ! echo "$existing_releases" | grep -q "^${version}$"; then
+              missing="$missing $version"
+            fi
+          done
+
+          # Output as JSON array
+          missing_json=$(echo $missing | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s -c .)
+          echo "versions=$missing_json" >> "$GITHUB_OUTPUT"
+          echo "Found versions without releases: $missing_json"
+
+      - name: Trigger releases
+        if: steps.find-versions.outputs.versions != '[]'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          versions='${{ steps.find-versions.outputs.versions }}'
+          for version in $(echo "$versions" | jq -r '.[]'); do
+            echo "Triggering release for $version"
+            gh workflow run release.yml -f version="$version"
+            # Small delay to avoid rate limiting
+            sleep 5
+          done
