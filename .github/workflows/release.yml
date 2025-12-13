@@ -97,9 +97,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: |
-          latest_flag=""
           if [[ "${{ inputs.latest }}" == "true" ]]; then
             latest_flag="--latest"
+          else
+            latest_flag="--latest=false"
           fi
           gh release create "${VERSION}" \
             --notes "Ruby ${VERSION} portable binaries" \
