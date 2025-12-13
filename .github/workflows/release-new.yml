@@ -3,8 +3,8 @@ name: Release New Versions
 on:
   workflow_dispatch:
   schedule:
-    # Run daily after autobump (which runs at midnight)
-    - cron: "30 0 * * *"
+    # Run every 12 hours to pick up new versions
+    - cron: "30 */12 * * *"
 
 permissions:
   contents: write
