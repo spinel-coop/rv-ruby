@@ -4,6 +4,7 @@
 require "abstract_command"
 require "development_tools"
 require "dependency"
+require "tmpdir"
 
 module Homebrew
   module Cmd
@@ -107,12 +108,32 @@ module Homebrew
           File.write j, JSON.generate(hash)
         end
 
-        Dir.glob("#{name}*").each do |f|
+        Dir.glob("#{name}*.tar.gz").each do |f|
           r = f.gsub("#{name}--", "ruby-")
           r = r.gsub /-HEAD-[a-f0-9]+/, "-dev"
           r = r.gsub(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
           r = r.gsub(".bottle.", yjit_tag)
-          FileUtils.mv f, r
+
+          # Repack tarball with flattened structure (strip one directory level)
+          # Homebrew bottles have structure: formula_name/version/... but we want: ruby-version/...
+          Dir.mktmpdir do |tmpdir|
+            system "tar", "-xzf", f, "-C", tmpdir
+            # Find the inner directory (e.g., jdx-ruby@3.4.1/3.4.1/...)
+            outer_dir = Dir.glob("#{tmpdir}/*/").first
+            inner_dir = Dir.glob("#{outer_dir}/*/").first
+            if inner_dir
+              # Get the version from the inner directory name
+              version = File.basename(inner_dir)
+              new_top = "#{tmpdir}/ruby-#{version}"
+              FileUtils.mv inner_dir, new_top
+              FileUtils.rm_rf outer_dir
+              system "tar", "-czf", r, "-C", tmpdir, "ruby-#{version}"
+            else
+              # Fallback: just rename without restructuring
+              FileUtils.mv f, r
+            end
+          end
+          FileUtils.rm_f f if File.exist?(f) && f != r
         end
       end
     end
