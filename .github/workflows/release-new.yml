@@ -21,7 +21,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           # Get all formula versions (extract version from jdx-ruby@X.Y.Z.rb)
-          formula_versions=$(ls Formula/jdx-ruby@*.rb | sed 's/Formula\/jdx-ruby@//; s/\.rb//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          # Matches stable (X.Y.Z) and preview (X.Y.Z-preview1, X.Y.Z-rc1, etc.)
+          formula_versions=$(ls Formula/jdx-ruby@*.rb | sed 's/Formula\/jdx-ruby@//; s/\.rb//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' || true)
 
           # Get existing releases
           existing_releases=$(gh release list --limit 100 --json tagName --jq '.[].tagName' || true)
