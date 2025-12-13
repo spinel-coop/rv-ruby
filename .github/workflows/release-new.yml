@@ -43,7 +43,7 @@ jobs:
       - name: Trigger releases
         if: steps.find-versions.outputs.versions != '[]'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           versions='${{ steps.find-versions.outputs.versions }}'
           for version in $(echo "$versions" | jq -r '.[]'); do
