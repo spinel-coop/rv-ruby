@@ -26,7 +26,7 @@ jobs:
       - run: date +%Y%m%d
       - id: setup
         run: |
-          list=$(ls Formula/rv-ruby* | jq --raw-input | jq --slurp --compact-output 'map(. |= .[8:-3])')
+          list=$(ls Formula/jdx-ruby* | jq --raw-input | jq --slurp --compact-output 'map(. |= .[8:-3])')
           if [[ -n "${{ inputs.formula }}" ]]; then
             list=$(echo $list | jq --compact-output 'map(select(. | contains("${{ inputs.formula }}")))')
           fi
@@ -58,7 +58,7 @@ jobs:
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew tap spinel-coop/rv-ruby .
+          brew tap jdx/ruby .
 
       - name: Checkout branch
         run: git checkout "${GITHUB_REF_NAME}"
@@ -75,7 +75,7 @@ jobs:
       - name: Download rubies
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
-          pattern: rv-ruby*
+          pattern: jdx-ruby*
           path: rubies
           merge-multiple: true
 
@@ -90,7 +90,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${TAG}" --notes "rv ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}" --prerelease
+          gh release create "${TAG}" --notes "jdx ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}" --prerelease
 
       - name: Upload to GitHub Releases
         working-directory: rubies

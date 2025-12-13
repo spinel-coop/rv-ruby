@@ -73,7 +73,7 @@ module Homebrew
             safe_system HOMEBREW_BREW_FILE, "linkage", *verbose, name
             bottle_args = %w[
               --skip-relocation
-              --root-url=https://ghcr.io/v2/spinel-coop/rv-ruby
+              --root-url=https://ghcr.io/v2/jdx/ruby
               --json
               --no-rebuild
             ]
@@ -99,7 +99,7 @@ module Homebrew
           json.gsub!(".bottle.", yjit_tag)
           json.gsub! ERB::Util.url_encode(name), "ruby"
           hash = JSON.parse(json)
-          bottle_name = name.gsub(/^rv-/, "")
+          bottle_name = name.gsub(/^jdx-/, "")
           bottle_name.gsub!("-dev", "@dev")
           hash[hash.keys.first]["formula"]["name"] = bottle_name
           hash[hash.keys.first]["formula"]["pkg_version"] = Date.today.to_s.tr("-", "")

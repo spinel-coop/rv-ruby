@@ -15,9 +15,9 @@ if [[ -n "$HOMEBREW_BASERUBY" && ! -f "$HOMEBREW_BASERUBY" ]]; then
 fi
 
 if [[ "dev" == "$NUMBER" ]]; then
-  PACKAGE="rv-ruby-dev"
+  PACKAGE="jdx-ruby-dev"
 else
-  PACKAGE="rv-ruby@${NUMBER}"
+  PACKAGE="jdx-ruby@${NUMBER}"
 fi
 
 set -x

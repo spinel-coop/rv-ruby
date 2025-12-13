@@ -29,7 +29,7 @@ jobs:
   #   if: github.event_name != 'push'
   #   uses: ./.github/workflows/build.yml
   #   with:
-  #     formula: portable-ruby@3.4.5
+  #     formula: jdx-ruby@3.4.5
 
   # This job is used as a required status check, instead of requiring each build matrix element.
   # When using ephemeral runners, the name of those runs change every time so they cannot be set as required.

@@ -1,19 +1,19 @@
-# rv ruby binaries
+# Portable Ruby Binaries
 
 Tools to build versions of Ruby that can be installed and run from anywhere on the filesystem.
 
 ## How do I use these rubies
 
-First, [install `rv`](https://github.com/spinel-coop/rv), and then run `rv ruby install`.
+These are general-purpose portable Ruby binaries. Download the appropriate tarball for your platform from the [releases page](https://github.com/jdx/ruby/releases) and extract it to any location.
 
 ## Local development
 
-- Run `bin/setup` to tap your checkout of this repo as `spinel-coop/rv-ruby`.
-- Run e.g. `brew rv-package --no-uninstall-deps --debug --verbose rv-ruby@3.4.5` to build Ruby 3.4.5 locally with YJIT.
+- Run `bin/setup` to tap your checkout of this repo as `jdx/ruby`.
+- Run e.g. `brew rv-package --no-uninstall-deps --debug --verbose jdx-ruby@3.4.5` to build Ruby 3.4.5 locally with YJIT.
 
 ## How do I issue a new release
 
-[An automated release workflow is available to use](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml).
+[An automated release workflow is available to use](https://github.com/jdx/ruby/actions/workflows/release.yml).
 Dispatch the workflow and all steps of building, tagging and uploading should be handled automatically.
 
 <details>
@@ -30,19 +30,21 @@ Copy the bottle `bottle*.tar.gz` and `bottle*.json` files into a directory on yo
 Upload these files to GitHub Packages with:
 
 ```sh
-brew pr-upload --upload-only --root-url=https://ghcr.io/v2/spinel-coop/rv-ruby
+brew pr-upload --upload-only --root-url=https://ghcr.io/v2/jdx/ruby
 ```
 
 And to GitHub releases:
 
 ```sh
-brew pr-upload --upload-only --root-url=https://github.com/spinel-coop/rv-ruby/releases/download/$VERSION
+brew pr-upload --upload-only --root-url=https://github.com/jdx/ruby/releases/download/$VERSION
 ```
 
 where `$VERSION` is the new package version.
 </details>
 
 ## Thanks
+
+Thanks to [spinel-coop](https://github.com/spinel-coop/rv-ruby) for the rv-ruby project this was forked from.
 
 Thanks to the [Homebrew](https://brew.sh) team for the [portable-ruby](https://github.com/Homebrew/homebrew-portable-ruby) code we used as a starting point.
 

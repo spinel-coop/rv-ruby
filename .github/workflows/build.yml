@@ -36,14 +36,14 @@ jobs:
       - name: Get version for setup-ruby
         run: |
           VERSION=${{ inputs.formula }}
-          VERSION=${VERSION//rv-ruby}
+          VERSION=${VERSION//jdx-ruby}
           VERSION=${VERSION//@}
           echo VERSION=${VERSION} >> $GITHUB_ENV
 
       # Static gem extensions typically require the same Ruby version available already
       - uses: ruby/setup-ruby@v1
         id: setup-ruby
-        if: ${{ inputs.formula != 'rv-ruby@0.49' && inputs.formula != 'rv-ruby-dev' }}
+        if: ${{ inputs.formula != 'jdx-ruby@0.49' && inputs.formula != 'jdx-ruby-dev' }}
         with:
           ruby-version: ${{ env.VERSION }}
 
@@ -73,10 +73,10 @@ jobs:
 
       - name: Test Portable Ruby
         run: |
-          mkdir -p rv-ruby/
-          tar --strip-components 2 -C rv-ruby -xf rubies/*.tar.gz
-          export PATH="${PWD}/rv-ruby/bin:${PATH}"
-          if [[ "${{ inputs.formula }}" == "rv-ruby@0.49" ]]; then
+          mkdir -p jdx-ruby/
+          tar --strip-components 2 -C jdx-ruby -xf rubies/*.tar.gz
+          export PATH="${PWD}/jdx-ruby/bin:${PATH}"
+          if [[ "${{ inputs.formula }}" == "jdx-ruby@0.49" ]]; then
             ruby --version
           else
             ruby --version --yjit

@@ -54,7 +54,7 @@ end
 
 class PortableFormula < Formula
   desc "Abstract portable formula"
-  homepage "https://github.com/spinel-coop/rv-ruby"
+  homepage "https://github.com/jdx/ruby"
 
   def self.inherited(subclass)
     subclass.class_eval do
