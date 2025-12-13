@@ -105,7 +105,14 @@ module Homebrew
           hash[hash.keys.first]["formula"]["name"] = bottle_name
           hash[hash.keys.first]["formula"]["pkg_version"] = Date.today.to_s.tr("-", "")
           hash[hash.keys.first]["formula"]["pkg_version"] << "-" << commit if commit
-          File.write j, JSON.generate(hash)
+
+          # Rename JSON file to match tarball naming
+          new_json = j.gsub("#{name}--", "ruby-")
+          new_json = new_json.gsub(/-HEAD-[a-f0-9]+/, "")
+          new_json = new_json.gsub(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
+          new_json = new_json.gsub(".bottle.", yjit_tag)
+          File.write new_json, JSON.generate(hash)
+          FileUtils.rm_f j if j != new_json
         end
 
         Dir.glob("#{name}*.tar.gz").each do |f|
