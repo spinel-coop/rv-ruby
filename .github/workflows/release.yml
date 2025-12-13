@@ -95,7 +95,7 @@ jobs:
 
       - name: Create Release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: |
           latest_flag=""
           if [[ "${{ inputs.latest }}" == "true" ]]; then
@@ -110,5 +110,5 @@ jobs:
       - name: Upload to GitHub Releases
         working-directory: rubies
         env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: brew jdx-upload --debug --root-url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
