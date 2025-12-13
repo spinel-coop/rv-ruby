@@ -62,7 +62,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
     env:
       VERSION: ${{ inputs.version }}
     steps:
@@ -87,13 +86,6 @@ jobs:
           pattern: ruby-${{ inputs.version }}-*
           path: rubies
           merge-multiple: true
-
-      - name: Upload to GitHub Packages
-        working-directory: rubies
-        env:
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
-        run: brew jdx-upload --debug --root-url="https://ghcr.io/v2/${GITHUB_REPOSITORY,,}"
 
       - name: Create Release
         env:
