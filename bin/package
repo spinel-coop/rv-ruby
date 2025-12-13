@@ -22,7 +22,7 @@ fi
 
 set -x
 brew uninstall --force "$PACKAGE"
-brew rv-package "$PACKAGE" \
+brew jdx-package "$PACKAGE" \
   --no-uninstall-deps \
   --debug \
   --verbose

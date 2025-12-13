@@ -9,7 +9,7 @@ These are general-purpose portable Ruby binaries. Download the appropriate tarba
 ## Local development
 
 - Run `bin/setup` to tap your checkout of this repo as `jdx/ruby`.
-- Run e.g. `brew rv-package --no-uninstall-deps --debug --verbose jdx-ruby@3.4.5` to build Ruby 3.4.5 locally with YJIT.
+- Run e.g. `brew jdx-package --no-uninstall-deps --debug --verbose jdx-ruby@3.4.5` to build Ruby 3.4.5 locally with YJIT.
 
 ## How do I issue a new release
 

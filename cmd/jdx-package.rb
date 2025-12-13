@@ -7,12 +7,12 @@ require "dependency"
 
 module Homebrew
   module Cmd
-    class RvPackageCmd < AbstractCommand
+    class JdxPackageCmd < AbstractCommand
       cmd_args do
         usage_banner <<~EOS
-          `rv-package` <formulae>
+          `jdx-package` <formulae>
 
-          Build and package rv formulae.
+          Build and package jdx formulae.
         EOS
         switch "--no-uninstall-deps",
                description: "Don't uninstall all dependencies of portable formulae before testing."
@@ -45,7 +45,7 @@ module Homebrew
           begin
             # Install build deps (but not static-linked deps) from bottles, to save compilation time
             bottled_dep_allowlist = /\A(?:glibc@|linux-headers@|ruby@|rustup|autoconf|pkgconf|bison)/
-            deps = Dependency.expand(Formula[name], cache_key: "rv-package-#{name}") do |_dependent, dep|
+            deps = Dependency.expand(Formula[name], cache_key: "jdx-package-#{name}") do |_dependent, dep|
               Dependency.prune if dep.test? || dep.optional?
               Dependency.prune if dep.name == "rustup" && args.without_yjit?
 

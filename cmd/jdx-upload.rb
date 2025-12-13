@@ -9,7 +9,7 @@ require "extend/hash/deep_merge"
 
 module Homebrew
   module Cmd
-    class RvUploadCmd < AbstractCommand
+    class JdxUploadCmd < AbstractCommand
       cmd_args do
         description <<~EOS
           Publish bottles to a host.
