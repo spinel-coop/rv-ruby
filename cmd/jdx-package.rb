@@ -95,7 +95,7 @@ module Homebrew
           json = File.read j
           json.gsub! "#{name}--", "ruby-"
           json.gsub! /-HEAD-[a-f0-9]+/, ""
-          json.gsub!(".sequoia.", ".ventura.")
+          json.gsub!(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
           json.gsub!(".bottle.", yjit_tag)
           json.gsub! ERB::Util.url_encode(name), "ruby"
           hash = JSON.parse(json)
@@ -110,7 +110,7 @@ module Homebrew
         Dir.glob("#{name}*").each do |f|
           r = f.gsub("#{name}--", "ruby-")
           r = r.gsub /-HEAD-[a-f0-9]+/, "-dev"
-          r = r.gsub(".sequoia.", ".ventura.")
+          r = r.gsub(/\.(sequoia|sonoma|ventura|monterey|big_sur)\./, ".macos.")
           r = r.gsub(".bottle.", yjit_tag)
           FileUtils.mv f, r
         end
