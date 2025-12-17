@@ -128,6 +128,8 @@ jobs:
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          RUBY_RELEASE_DATE: ${{ steps.ruby-release.outputs.date }}
+          HAS_CHANGELOG: ${{ steps.ruby-release.outputs.has_changelog }}
         run: |
           if [[ "${{ inputs.latest }}" == "true" ]]; then
             latest_flag="--latest"
@@ -135,28 +137,26 @@ jobs:
             latest_flag="--latest=false"
           fi
 
-          # Build release notes
-          notes="Ruby ${VERSION} portable binaries"
+          # Build release notes file
+          echo "Ruby ${VERSION} portable binaries" > /tmp/release_notes.md
 
-          if [[ -n "${{ steps.ruby-release.outputs.date }}" ]]; then
-            notes="${notes}
-
-**Released by Ruby:** ${{ steps.ruby-release.outputs.date }}"
+          if [[ -n "$RUBY_RELEASE_DATE" ]]; then
+            echo "" >> /tmp/release_notes.md
+            echo "**Released by Ruby:** ${RUBY_RELEASE_DATE}" >> /tmp/release_notes.md
           fi
 
-          if [[ "${{ steps.ruby-release.outputs.has_changelog }}" == "true" ]]; then
-            notes="${notes}
-
----
-
-$(cat /tmp/ruby_changelog.md)"
+          if [[ "$HAS_CHANGELOG" == "true" ]]; then
+            echo "" >> /tmp/release_notes.md
+            echo "---" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            cat /tmp/ruby_changelog.md >> /tmp/release_notes.md
           fi
 
           # Delete existing release if it exists
           gh release delete "${VERSION}" --yes --cleanup-tag || true
           gh release create "${VERSION}" \
             --draft \
-            --notes "$notes" \
+            --notes-file /tmp/release_notes.md \
             --target "$(git rev-parse --verify HEAD)" \
             --title "${VERSION}" \
             $latest_flag
