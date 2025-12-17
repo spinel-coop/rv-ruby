@@ -201,30 +201,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: gh release upload "${VERSION}" *.tar.gz --clobber --repo "${{ github.repository }}"
 
-      # ============================================
-      # Supply Chain Security
-      # ============================================
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Sign artifacts with cosign
-        working-directory: rubies
-        run: |
-          for artifact in *.tar.gz; do
-            echo "Signing ${artifact}..."
-            cosign sign-blob --yes \
-              --output-signature "${artifact}.sig" \
-              --output-certificate "${artifact}.pem" \
-              "${artifact}"
-          done
-
-      - name: Upload signatures to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-        working-directory: rubies
-        run: gh release upload "${VERSION}" *.sig *.pem --clobber --repo "${{ github.repository }}"
-
       - name: Download SLSA provenance
         uses: actions/download-artifact@v4
         with:
