@@ -199,7 +199,7 @@ jobs:
         working-directory: rubies
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-        run: gh release upload "${VERSION}" *.tar.gz --clobber
+        run: gh release upload "${VERSION}" *.tar.gz --clobber --repo "${{ github.repository }}"
 
       # ============================================
       # Supply Chain Security
@@ -223,7 +223,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         working-directory: rubies
-        run: gh release upload "${VERSION}" *.sig *.pem --clobber
+        run: gh release upload "${VERSION}" *.sig *.pem --clobber --repo "${{ github.repository }}"
 
       - name: Download SLSA provenance
         uses: actions/download-artifact@v4
@@ -234,7 +234,7 @@ jobs:
       - name: Upload SLSA provenance to release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-        run: gh release upload "${VERSION}" provenance/*.intoto.jsonl --clobber
+        run: gh release upload "${VERSION}" provenance/*.intoto.jsonl --clobber --repo "${{ github.repository }}"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
