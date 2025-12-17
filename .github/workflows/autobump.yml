@@ -22,8 +22,8 @@ jobs:
 
       - name: Configure Git
         run: |
-          git config user.name "jdx-bot"
-          git config user.email "jdx-bot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Check for new Ruby versions
         env:
