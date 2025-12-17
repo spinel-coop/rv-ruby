@@ -7,45 +7,73 @@ on:
     paths:
       - .github/workflows/autobump.yml
   workflow_dispatch:
-    inputs:
-      formulae:
-        description: Custom list of jdx-ruby formulae to livecheck and bump if outdated
-        required: false
   schedule:
     # Daily at midnight
     - cron: "0 0 * * *"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   autobump:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/homebrew/ubuntu22.04:main
     steps:
-      - name: Set up Homebrew
-        id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@main
-        with:
-          core: false
-          cask: false
-          test-bot: false
+      - uses: actions/checkout@main
 
-      - name: Configure Git user
-        uses: Homebrew/actions/git-user-config@main
-        with:
-          username: ${{ (github.event_name == 'workflow_dispatch' && github.actor) || 'jdx-bot' }}
+      - name: Configure Git
+        run: |
+          git config user.name "jdx-bot"
+          git config user.email "jdx-bot@users.noreply.github.com"
 
-      - name: Get list of autobump jdx-ruby formulae
-        id: autobump
-        run: echo "autobump_list=$(brew tap-info --json "${GITHUB_REPOSITORY}" | jq -r '.[].formula_names|join(" ")')" >> "$GITHUB_OUTPUT"
-
-      - name: Bump jdx-ruby formulae
-        uses: Homebrew/actions/bump-packages@main
-        continue-on-error: true
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          formulae: ${{ github.event.inputs.formulae || steps.autobump.outputs.autobump_list }}
+      - name: Check for new Ruby versions
         env:
-          HOMEBREW_TEST_BOT_AUTOBUMP: 1
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Get latest patch versions for each minor series we support
+          for minor in 3.2 3.3 3.4; do
+            # Get latest release for this minor version from ruby/ruby
+            latest=$(gh release list --repo ruby/ruby --limit 100 --json tagName --jq '.[].tagName' | \
+              grep "^v${minor//./_}_" | \
+              sed 's/^v//; s/_/./g' | \
+              grep -E "^${minor}\.[0-9]+$" | \
+              sort -V | tail -1)
+
+            if [[ -z "$latest" ]]; then
+              echo "No release found for $minor series"
+              continue
+            fi
+
+            echo "Latest $minor release: $latest"
+
+            # Check if formula exists
+            formula_file="Formula/jdx-ruby@${latest}.rb"
+            if [[ -f "$formula_file" ]]; then
+              echo "Formula already exists: $formula_file"
+              continue
+            fi
+
+            # Get SHA256 from ruby-lang.org
+            tarball_url="https://cache.ruby-lang.org/pub/ruby/${minor}/ruby-${latest}.tar.gz"
+            echo "Fetching SHA256 for $tarball_url"
+            sha256=$(curl -sL "$tarball_url" | sha256sum | cut -d' ' -f1)
+
+            if [[ -z "$sha256" || "$sha256" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]]; then
+              echo "Failed to get SHA256 for $latest"
+              continue
+            fi
+
+            # Determine abstract class (3.2 -> 32, 3.3 -> 33, etc)
+            abstract_num="${minor//./}"
+            class_version="${latest//./}"
+
+            echo "Creating formula for Ruby $latest"
+            printf 'require File.expand_path("../Abstract/jdx-ruby-%s", __dir__)\n\nclass JdxRubyAT%s < JdxRuby%s\n  url "%s"\n  sha256 "%s"\nend\n' \
+              "$abstract_num" "$class_version" "$abstract_num" "$tarball_url" "$sha256" > "$formula_file"
+
+            git add "$formula_file"
+            git commit -m "Add jdx-ruby@${latest}"
+            echo "Created $formula_file"
+          done
+
+      - name: Push changes
+        run: git push
