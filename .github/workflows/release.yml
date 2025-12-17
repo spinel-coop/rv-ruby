@@ -170,13 +170,11 @@ jobs:
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
     with:
       base64-subjects: "${{ needs.combine-hashes.outputs.hashes }}"
-      upload-assets: true
-      upload-tag-name: "${{ inputs.version }}"
-      draft-release: true
+      upload-assets: false
       provenance-name: "ruby-${{ inputs.version }}.intoto.jsonl"
 
   upload-assets:
-    needs: [build, create-release]
+    needs: [build, create-release, provenance]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -236,6 +234,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         working-directory: rubies
         run: gh release upload "${VERSION}" *.sig *.pem --clobber
+
+      - name: Download SLSA provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: "ruby-${{ inputs.version }}.intoto.jsonl"
+          path: provenance
+
+      - name: Upload SLSA provenance to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: gh release upload "${VERSION}" provenance/*.intoto.jsonl --clobber
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
