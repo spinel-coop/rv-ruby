@@ -188,21 +188,6 @@ jobs:
     env:
       VERSION: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@main
-
-      - name: Install Homebrew
-        run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew tap jdx/ruby .
-
-      - name: Install gems
-        run: brew install-bundler-gems --groups=pr_upload
-
-      - name: Configure Git user
-        uses: Homebrew/actions/git-user-config@main
-
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -210,11 +195,11 @@ jobs:
           path: rubies
           merge-multiple: true
 
-      - name: Upload to GitHub Releases
+      - name: Upload tarballs to GitHub Release
         working-directory: rubies
         env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-        run: brew jdx-upload --debug --root-url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: gh release upload "${VERSION}" *.tar.gz --clobber
 
       # ============================================
       # Supply Chain Security
