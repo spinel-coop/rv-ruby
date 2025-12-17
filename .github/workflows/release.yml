@@ -205,4 +205,9 @@ jobs:
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-        run: gh release edit "${VERSION}" --draft=false --repo "${{ github.repository }}"
+        run: |
+          if [[ "${{ inputs.latest }}" == "true" ]]; then
+            gh release edit "${VERSION}" --draft=false --latest --repo "${{ github.repository }}"
+          else
+            gh release edit "${VERSION}" --draft=false --latest=false --repo "${{ github.repository }}"
+          fi
