@@ -153,14 +153,11 @@ jobs:
           fi
 
           # Delete ALL existing releases matching this version (handles orphaned releases)
-          echo "Looking for releases matching version ${VERSION}..."
-          gh api repos/${{ github.repository }}/releases --jq ".[] | select(.name == \"${VERSION}\" or .tag_name == \"${VERSION}\") | {id, name, tag_name}" || echo "API call failed"
           for release_id in $(gh api repos/${{ github.repository }}/releases --jq ".[] | select(.name == \"${VERSION}\" or .tag_name == \"${VERSION}\") | .id"); do
             echo "Deleting release $release_id"
             gh api -X DELETE "repos/${{ github.repository }}/releases/$release_id" || true
           done
           # Also delete the tag if it exists
-          echo "Deleting tag ${VERSION} if it exists..."
           gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${VERSION}" 2>/dev/null || true
           gh release create "${VERSION}" \
             --draft \
