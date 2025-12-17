@@ -2,6 +2,12 @@ name: Release New Versions
 
 on:
   workflow_dispatch:
+    inputs:
+      replace_all:
+        description: 'Replace all existing releases'
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Run every 12 hours to pick up new versions
     - cron: "30 */12 * * *"
@@ -15,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@main
 
-      - name: Find versions without releases
+      - name: Find versions to release
         id: find-versions
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -24,21 +30,27 @@ jobs:
           # Matches stable (X.Y.Z) and preview (X.Y.Z-preview1, X.Y.Z-rc1, etc.)
           formula_versions=$(ls Formula/jdx-ruby@*.rb | sed 's/Formula\/jdx-ruby@//; s/\.rb//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' || true)
 
-          # Get existing releases
-          existing_releases=$(gh release list --limit 100 --json tagName --jq '.[].tagName' || true)
+          if [[ "${{ inputs.replace_all }}" == "true" ]]; then
+            # Release all versions
+            versions_to_release="$formula_versions"
+            echo "Replacing all releases"
+          else
+            # Get existing releases
+            existing_releases=$(gh release list --limit 100 --json tagName --jq '.[].tagName' || true)
 
-          # Find versions without releases
-          missing=""
-          for version in $formula_versions; do
-            if ! echo "$existing_releases" | grep -q "^${version}$"; then
-              missing="$missing $version"
-            fi
-          done
+            # Find versions without releases
+            versions_to_release=""
+            for version in $formula_versions; do
+              if ! echo "$existing_releases" | grep -q "^${version}$"; then
+                versions_to_release="$versions_to_release $version"
+              fi
+            done
+            echo "Found versions without releases: $versions_to_release"
+          fi
 
           # Output as JSON array
-          missing_json=$(echo $missing | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s -c .)
-          echo "versions=$missing_json" >> "$GITHUB_OUTPUT"
-          echo "Found versions without releases: $missing_json"
+          versions_json=$(echo $versions_to_release | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s -c .)
+          echo "versions=$versions_json" >> "$GITHUB_OUTPUT"
 
           # Determine latest stable version (highest non-preview version)
           all_versions=$(ls Formula/jdx-ruby@*.rb | sed 's/Formula\/jdx-ruby@//; s/\.rb//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
