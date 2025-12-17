@@ -104,6 +104,8 @@ jobs:
           else
             latest_flag="--latest=false"
           fi
+          # Delete existing release if it exists
+          gh release delete "${VERSION}" --yes --cleanup-tag || true
           gh release create "${VERSION}" \
             --draft \
             --notes "Ruby ${VERSION} portable binaries" \
