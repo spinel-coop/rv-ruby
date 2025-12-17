@@ -2,13 +2,8 @@
 
 module PortableFormulaMixin
   if OS.mac?
-    if Hardware::CPU.arm?
-      TARGET_MACOS = :sonoma
-      TARGET_DARWIN_VERSION = Version.new("23.6.0").freeze
-    else
-      TARGET_MACOS = :ventura
-      TARGET_DARWIN_VERSION = Version.new("22.6.0").freeze
-    end
+    TARGET_MACOS = :sonoma
+    TARGET_DARWIN_VERSION = Version.new("23.6.0").freeze
   end
 
   def install
@@ -20,7 +15,6 @@ module PortableFormulaMixin
           You are building portable formula on #{OS::Mac.version}.
           As result, formula won't be able to work on older macOS versions.
           It's recommended to build this formula on macOS #{target_macos_humanized}
-          (the oldest version that can run Homebrew).
         EOS
       end
 

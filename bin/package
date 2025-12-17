@@ -20,6 +20,8 @@ else
   PACKAGE="rv-ruby@${NUMBER}"
 fi
 
+export HOMEBREW_TARGET_CPU="x86"
+
 set -x
 brew uninstall --force "$PACKAGE"
 brew rv-package "$PACKAGE" \

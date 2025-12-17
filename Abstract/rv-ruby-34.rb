@@ -105,6 +105,16 @@ class RvRuby34 < Formula
       --disable-dependency-tracking
     ]
 
+    # Allow cross-compile between Darwin CPUs, intel is SO SLOW
+    if OS.mac? && ENV["HOMEBREW_TARGET_CPU"]
+      build_cpu = Hardware::CPU.arm? ? "aarch64" : "x86_64"
+      host_cpu = ENV["HOMEBREW_TARGET_CPU"] =~ /x86/ ? "x86_64" : "aarch64"
+      args += %W[
+        --build=#{build_cpu}-apple-darwin#{OS.kernel_version}
+        --host=#{host_cpu}-apple-darwin#{OS.kernel_version}
+      ]
+    end
+
     baseruby = ENV["HOMEBREW_BASERUBY"] || RbConfig.ruby
     baseruby_version = baseruby && %x[#{baseruby} -v]
     baseruby_allowed = baseruby_version =~ /#{Regexp.escape(version)}/
