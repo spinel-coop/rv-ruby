@@ -20,6 +20,9 @@ env:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
+  actions: read  # For SLSA provenance
 
 jobs:
   build:
@@ -63,11 +66,69 @@ jobs:
           name: ruby-${{ inputs.version }}-${{ matrix.runner }}
           path: rubies/
 
-  release:
+  combine-hashes:
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.combine.outputs.hashes }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ruby-${{ inputs.version }}-*
+          path: rubies
+          merge-multiple: true
+
+      - name: Combine hashes
+        id: combine
+        working-directory: rubies
+        run: |
+          echo "hashes=$(sha256sum *.tar.gz | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+  create-release:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          if [[ "${{ inputs.latest }}" == "true" ]]; then
+            latest_flag="--latest"
+          else
+            latest_flag="--latest=false"
+          fi
+          gh release create "${VERSION}" \
+            --notes "Ruby ${VERSION} portable binaries" \
+            --target "$(git rev-parse --verify HEAD)" \
+            --title "${VERSION}" \
+            $latest_flag
+
+  provenance:
+    needs: [combine-hashes, create-release]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.combine-hashes.outputs.hashes }}"
+      upload-assets: true
+      provenance-name: "ruby-${{ inputs.version }}.intoto.jsonl"
+
+  upload-assets:
+    needs: [build, create-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
       VERSION: ${{ inputs.version }}
     steps:
@@ -93,23 +154,37 @@ jobs:
           path: rubies
           merge-multiple: true
 
-      - name: Create Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-        run: |
-          if [[ "${{ inputs.latest }}" == "true" ]]; then
-            latest_flag="--latest"
-          else
-            latest_flag="--latest=false"
-          fi
-          gh release create "${VERSION}" \
-            --notes "Ruby ${VERSION} portable binaries" \
-            --target "$(git rev-parse --verify HEAD)" \
-            --title "${VERSION}" \
-            $latest_flag
-
       - name: Upload to GitHub Releases
         working-directory: rubies
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: brew jdx-upload --debug --root-url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
+
+      # ============================================
+      # Supply Chain Security
+      # ============================================
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign artifacts with cosign
+        working-directory: rubies
+        run: |
+          for artifact in *.tar.gz; do
+            echo "Signing ${artifact}..."
+            cosign sign-blob --yes \
+              --output-signature "${artifact}.sig" \
+              --output-certificate "${artifact}.pem" \
+              "${artifact}"
+          done
+
+      - name: Upload signatures to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        working-directory: rubies
+        run: gh release upload "${VERSION}" *.sig *.pem --clobber
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'rubies/*.tar.gz'
