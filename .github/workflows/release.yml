@@ -123,6 +123,8 @@ jobs:
     with:
       base64-subjects: "${{ needs.combine-hashes.outputs.hashes }}"
       upload-assets: true
+      upload-tag-name: "${{ inputs.version }}"
+      draft-release: true
       provenance-name: "ruby-${{ inputs.version }}.intoto.jsonl"
 
   upload-assets:
