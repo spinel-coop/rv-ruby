@@ -23,11 +23,15 @@ jobs:
   build:
     strategy:
       matrix:
-        runner:
-          - macos-15-intel # intel
-          - macos-14 # arm
-          - ubuntu-22.04
-          - ubuntu-22.04-arm
+        include:
+          - runner: ubuntu-22.04
+            arch:
+          - runner: ubuntu-22.04-arm
+            arch:
+          - runner: macos-14
+            arch: x86_64
+          - runner: macos-14
+            arch: arm64
       fail-fast: false
     runs-on: ${{ matrix.runner }}
     steps:
@@ -66,7 +70,11 @@ jobs:
           fi
           mkdir -p rubies/
           cd rubies
-          brew rv-package --verbose ${{ inputs.formula }}
+          if [[ -n "${{ matrix.arch }}" ]]; then
+            echo arch -${{ matrix.arch }} brew rv-package --verbose ${{ inputs.formula }}
+          else
+            echo brew rv-package --verbose ${{ inputs.formula }}
+          fi
 
       - name: Upload rv Ruby
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
