@@ -111,8 +111,7 @@ class JdxRuby34 < Formula
     if baseruby && baseruby_allowed
       args += %W[--with-baseruby=#{baseruby}]
     else
-      odie "HOMEBREW_BASERUBY must contain the path to a ruby #{version} executable, " \
-        "but instead contains #{baseruby}, with version #{baseruby_version}"
+      args += %W[--with-baseruby=#{RbConfig.ruby}]
     end
 
     args += %W[--enable-yjit] unless build.without? "yjit"

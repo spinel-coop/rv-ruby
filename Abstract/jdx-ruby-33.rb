@@ -74,10 +74,12 @@ class JdxRuby33 < Formula
   end
 
  def install
-    # share RUSTUP_HOME across installs if provided
-    ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
-    # provide rustc for YJIT compilation
-    system "rustup install 1.58 --profile minimal" unless build.without? "yjit"
+    if build.with? "yjit"
+      # share RUSTUP_HOME across installs if provided
+      ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
+      ENV["RUSTUP_TOOLCHAIN"] = "1.58"
+      system "rustup install 1.58 --profile minimal" unless system("which rustc")
+    end
 
     bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
       line.blank? || line.start_with?("#")
@@ -108,8 +110,7 @@ class JdxRuby33 < Formula
       if baseruby && baseruby_version =~ /#{Regexp.escape(version)}/
         args += %W[--with-baseruby=#{baseruby}]
       else
-        odie "HOMEBREW_BASERUBY must contain the path to a ruby #{version} executable, " \
-          "but instead contains #{baseruby}, with version #{baseruby_version}"
+        args += %W[--with-baseruby=#{RbConfig.ruby}]
       end
     end
 

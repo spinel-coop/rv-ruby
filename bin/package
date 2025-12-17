@@ -4,7 +4,7 @@ NUMBER="$1"
 
 export HOMEBREW_RUSTUP_HOME="$HOME/.rustup"
 
-if [[ "0.49" != "$NUMBER" && "dev" != "$NUMBER" ]]; then
+if [[ "$NUMBER" == "3.2."* ]]; then
   export HOMEBREW_BASERUBY="$HOME/.rubies/ruby-${NUMBER}/bin/ruby"
 fi
 

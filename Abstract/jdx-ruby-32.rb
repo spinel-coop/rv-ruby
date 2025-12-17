@@ -75,10 +75,12 @@ class JdxRuby32 < Formula
   end
 
  def install
-    # share RUSTUP_HOME across installs if provided
-    ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
-    # provide rustc for YJIT compilation
-    system "rustup install 1.58 --profile minimal" unless build.without? "yjit"
+    if build.with? "yjit"
+      # share RUSTUP_HOME across installs if provided
+      ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
+      ENV["RUSTUP_TOOLCHAIN"] = "1.58"
+      system "rustup install 1.58 --profile minimal" unless system("which rustc")
+    end
 
     bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
       line.blank? || line.start_with?("#")

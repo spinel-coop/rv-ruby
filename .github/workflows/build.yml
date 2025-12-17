@@ -34,22 +34,25 @@ jobs:
 
       - name: Get version for setup-ruby
         run: |
-          VERSION=${{ inputs.formula }}
-          VERSION=${VERSION//jdx-ruby}
-          VERSION=${VERSION//@}
-          echo VERSION=${VERSION} >> $GITHUB_ENV
+          SETUP_RUBY_VERSION=${{ inputs.formula }}
+          SETUP_RUBY_VERSION=${SETUP_RUBY_VERSION//jdx-ruby}
+          SETUP_RUBY_VERSION=${SETUP_RUBY_VERSION//@}
+          if [[ "$SETUP_RUBY_VERSION" == "3.2."* ]]; then
+            echo SETUP_RUBY_VERSION=${SETUP_RUBY_VERSION} >> $GITHUB_ENV
+          fi
 
       # Static gem extensions typically require the same Ruby version available already
       - uses: ruby/setup-ruby@v1
         id: setup-ruby
-        if: ${{ inputs.formula != 'jdx-ruby@0.49' && inputs.formula != 'jdx-ruby-dev' }}
+        if: ${{ env.SETUP_RUBY_VERSION != '' }}
         with:
-          ruby-version: ${{ env.VERSION }}
+          ruby-version: ${{ env.SETUP_RUBY_VERSION }}
 
       - name: Install Homebrew
         run: |
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+          echo "/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
       - name: Tap repo
