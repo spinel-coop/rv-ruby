@@ -95,15 +95,17 @@ jobs:
     steps:
       - uses: actions/checkout@main
 
-      - name: Get Ruby release date
+      - name: Get Ruby release info
         id: ruby-release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           # Convert version format: 3.4.1 -> v3_4_1
           ruby_tag="v${VERSION//./_}"
-          # Fetch release date from ruby/ruby repo
-          release_date=$(gh release view "$ruby_tag" --repo ruby/ruby --json publishedAt --jq '.publishedAt' 2>/dev/null || echo "")
+          # Fetch release info from ruby/ruby repo
+          release_info=$(gh release view "$ruby_tag" --repo ruby/ruby --json publishedAt,body 2>/dev/null || echo "{}")
+
+          release_date=$(echo "$release_info" | jq -r '.publishedAt // empty')
           if [[ -n "$release_date" ]]; then
             # Format as YYYY-MM-DD
             formatted_date=$(date -d "$release_date" '+%Y-%m-%d' 2>/dev/null || date -j -f '%Y-%m-%dT%H:%M:%SZ' "$release_date" '+%Y-%m-%d' 2>/dev/null || echo "${release_date:0:10}")
@@ -112,6 +114,15 @@ jobs:
           else
             echo "date=" >> "$GITHUB_OUTPUT"
             echo "Could not find Ruby release date for $ruby_tag"
+          fi
+
+          # Save changelog body to file (handles multiline content)
+          changelog=$(echo "$release_info" | jq -r '.body // empty')
+          if [[ -n "$changelog" ]]; then
+            echo "$changelog" > /tmp/ruby_changelog.md
+            echo "has_changelog=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changelog=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Release
@@ -125,12 +136,20 @@ jobs:
           fi
 
           # Build release notes
-          if [[ -n "${{ steps.ruby-release.outputs.date }}" ]]; then
-            notes="Ruby ${VERSION} portable binaries
+          notes="Ruby ${VERSION} portable binaries"
 
-Released by Ruby: ${{ steps.ruby-release.outputs.date }}"
-          else
-            notes="Ruby ${VERSION} portable binaries"
+          if [[ -n "${{ steps.ruby-release.outputs.date }}" ]]; then
+            notes="${notes}
+
+**Released by Ruby:** ${{ steps.ruby-release.outputs.date }}"
+          fi
+
+          if [[ "${{ steps.ruby-release.outputs.has_changelog }}" == "true" ]]; then
+            notes="${notes}
+
+---
+
+$(cat /tmp/ruby_changelog.md)"
           fi
 
           # Delete existing release if it exists
