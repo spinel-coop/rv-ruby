@@ -37,6 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@main
 
+      - name: Import codesign certs
+        if: runner.os == 'macOS'
+        uses: apple-actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d # v3
+        with:
+          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
+
       - uses: ruby/setup-ruby@v1
         id: setup-ruby
         with:
@@ -59,6 +66,33 @@ jobs:
           mkdir -p rubies/
           cd rubies
           brew jdx-package --verbose jdx-ruby@${{ inputs.version }}
+
+      - name: Codesign macOS binaries
+        if: runner.os == 'macOS'
+        working-directory: rubies
+        run: |
+          tarball=$(ls *.tar.gz)
+          echo "Signing binaries in $tarball"
+
+          # Extract
+          mkdir -p extracted
+          tar -xzf "$tarball" -C extracted
+
+          # Sign all Mach-O binaries
+          find extracted -type f | while read -r file; do
+            if file "$file" | grep -q "Mach-O"; then
+              echo "Signing $file"
+              codesign --sign "Developer ID Application: Jeffrey Dickey (4993Y37DX6)" \
+                --identifier "dev.jdx.ruby" \
+                --options runtime \
+                --force \
+                "$file"
+            fi
+          done
+
+          # Re-create tarball
+          rm "$tarball"
+          tar -czf "$tarball" -C extracted .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
