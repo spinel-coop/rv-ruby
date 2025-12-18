@@ -18,8 +18,6 @@ module Homebrew
                description: "Don't uninstall all dependencies of portable formulae before testing."
         switch "-v", "--verbose",
                description: "Pass `--verbose` to `brew` commands."
-        switch "--without-yjit",
-               description: "Build Ruby without YJIT included."
         named_args :formula, min: 1
       end
 
@@ -32,7 +30,6 @@ module Homebrew
         verbose << "--debug" if args.debug?
 
         flags = []
-        flags << "--without-yjit" if args.without_yjit?
 
         # If test-bot cleanup is performed and auto-updates are disabled, this might not already be installed.
         unless DevelopmentTools.ca_file_handles_most_https_certificates?
@@ -47,7 +44,6 @@ module Homebrew
             bottled_dep_blocklist = /portable-/
             deps = Dependency.expand(Formula[name], cache_key: "rv-package-#{name}") do |_dependent, dep|
               Dependency.prune if dep.test? || dep.optional?
-              Dependency.prune if dep.name == "rustup" && args.without_yjit?
 
               next if bottled_dep_blocklist.match?(dep.name)
 
@@ -79,16 +75,14 @@ module Homebrew
             ]
             safe_system HOMEBREW_BREW_FILE, "bottle", *verbose, *bottle_args, name
 
-            rename_bottles name, args.without_yjit?
+            rename_bottles name
           rescue => e
             ofail e
           end
         end
       end
 
-      def rename_bottles(name, disable_yjit)
-        yjit_tag = disable_yjit ? ".no_yjit." : "."
-
+      def rename_bottles(name)
         Dir.glob("*.bottle.json").each do |j|
           commit = j.match(/-HEAD-([a-f0-9]+)/){|m|m[1]}
 
@@ -96,7 +90,7 @@ module Homebrew
           json.gsub! "#{name}--", "ruby-"
           json.gsub! /-HEAD-[a-f0-9]+/, ""
           json.gsub!(".sequoia.", ".ventura.")
-          json.gsub!(".bottle.", yjit_tag)
+          json.gsub!(".bottle.", ".")
           json.gsub! ERB::Util.url_encode(name), "ruby"
           hash = JSON.parse(json)
           bottle_name = name.gsub(/^rv-/, "")
@@ -111,7 +105,7 @@ module Homebrew
           r = f.gsub("#{name}--", "ruby-")
           r = r.gsub /-HEAD-[a-f0-9]+/, "-dev"
           r = r.gsub(".sequoia.", ".ventura.")
-          r = r.gsub(".bottle.", yjit_tag)
+          r = r.gsub(".bottle.", ".")
           FileUtils.mv f, r
         end
       end

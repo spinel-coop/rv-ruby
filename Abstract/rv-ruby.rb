@@ -22,9 +22,7 @@ class RvRuby < Formula
 
       keg_only "portable formulae are keg-only"
 
-      option "without-yjit", "Build Ruby without YJIT (required for glibc < 2.35)"
-
-      depends_on "rustup" => :build unless build.without? "yjit"
+      depends_on "rustup" => :build
       depends_on "pkgconf" => :build
       depends_on "portable-libyaml@0.2.5" => :build
       depends_on "portable-openssl@3.5.1" => :build
@@ -33,16 +31,6 @@ class RvRuby < Formula
         depends_on "portable-libffi@3.5.1" => :build
         depends_on "portable-libxcrypt@4.4.38" => :build
         depends_on "portable-zlib@1.3.1" => :build
-
-        if build.without? "yjit"
-          on_intel do
-            depends_on "glibc@2.13" => :build
-          end
-          on_arm do
-            depends_on "glibc@2.17" => :build
-          end
-          depends_on "linux-headers@4.4" => :build
-        end
       end
 
       resource "msgpack" do
@@ -75,12 +63,10 @@ class RvRuby < Formula
   end
 
   def install
-    if build.with? "yjit"
-      # share RUSTUP_HOME across installs if provided
-      ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
-      ENV["RUSTUP_TOOLCHAIN"] = "1.58"
-      system "rustup install 1.58 --profile minimal" unless system("which rustc")
-    end
+    # share RUSTUP_HOME across installs if provided
+    ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
+    ENV["RUSTUP_TOOLCHAIN"] = "1.58"
+    system "rustup install 1.58 --profile minimal" unless system("which rustc")
 
     bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
       line.blank? || line.start_with?("#") || line =~ /win32/
@@ -104,9 +90,8 @@ class RvRuby < Formula
       --disable-install-doc
       --disable-install-rdoc
       --disable-dependency-tracking
+      --enable-yjit
     ]
-
-    args += %W[--enable-yjit] unless build.without? "yjit"
 
     # We don't specify OpenSSL as we want it to use the pkg-config, which `--with-openssl-dir` will disable
     args += %W[
@@ -168,8 +153,6 @@ class RvRuby < Formula
         s.gsub! ENV.cc, "cc"
         # Change e.g. `CONFIG["AR"] = "gcc-ar-11"` to `CONFIG["AR"] = "ar"`
         s.gsub!(/(CONFIG\[".+"\] = )"gcc-(.*)-\d+"/, '\\1"\\2"')
-        # C++ compiler might have been disabled because we break it with glibc@* builds
-        s.sub!(/(CONFIG\["CXX"\] = )"false"/, '\\1"c++"') if build.without? "yjit"
       end
 
       # Ship libcrypt.a so that building native gems doesn't need system libcrypt installed.
