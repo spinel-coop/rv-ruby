@@ -8,8 +8,8 @@ on:
       - .github/workflows/autobump.yml
   workflow_dispatch:
   schedule:
-    # Daily at midnight
-    - cron: "0 0 * * *"
+    # Twice daily at midnight and noon UTC
+    - cron: "0 0,12 * * *"
 
 permissions:
   contents: write
