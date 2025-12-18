@@ -75,5 +75,74 @@ jobs:
             echo "Created $formula_file"
           done
 
+      - name: Check for prerelease Ruby versions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Check for preview/rc releases for upcoming versions
+          # Only pick up prereleases for minor versions that don't have stable releases yet
+
+          # Get all releases once
+          all_releases=$(gh release list --repo ruby/ruby --limit 100 --json tagName --jq '.[].tagName')
+
+          echo "$all_releases" | while read -r tag; do
+            # Skip if not a prerelease (must contain preview or rc)
+            if ! echo "$tag" | grep -qiE '(preview|rc)'; then
+              continue
+            fi
+
+            # Convert tag to version string
+            # Handle both formats: v3_5_0_preview1 and v4.0.0-preview2
+            if echo "$tag" | grep -q '\.'; then
+              # New format: v4.0.0-preview2 -> 4.0.0-preview2
+              version=$(echo "$tag" | sed 's/^v//')
+            else
+              # Old format: v3_5_0_preview1 -> 3.5.0-preview1
+              version=$(echo "$tag" | sed 's/^v//; s/_/./g' | sed 's/\.\(preview\)/\-\1/i; s/\.\(rc\)/-\1/i')
+            fi
+
+            # Extract minor version (e.g., 3.5 from 3.5.0-preview1)
+            minor=$(echo "$version" | grep -oE '^[0-9]+\.[0-9]+')
+
+            # Skip if this minor version already has a stable release
+            # Check for tags like v3_5_0, v3_5_1, etc. (stable = no preview/rc suffix)
+            minor_pattern="^v${minor//./_}_[0-9]+$"
+            if echo "$all_releases" | grep -qE "$minor_pattern"; then
+              echo "Skipping $version - stable releases exist for $minor series"
+              continue
+            fi
+
+            echo "Found prerelease: $version (tag: $tag)"
+
+            # Check if formula already exists
+            formula_file="Formula/jdx-ruby@${version}.rb"
+            if [[ -f "$formula_file" ]]; then
+              echo "Formula already exists: $formula_file"
+              continue
+            fi
+
+            # Get SHA256 from ruby-lang.org
+            tarball_url="https://cache.ruby-lang.org/pub/ruby/${minor}/ruby-${version}.tar.gz"
+            echo "Fetching SHA256 for $tarball_url"
+            sha256=$(curl -sL "$tarball_url" | sha256sum | cut -d' ' -f1)
+
+            if [[ -z "$sha256" || "$sha256" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]]; then
+              echo "Failed to get SHA256 for $version (tarball may not be available yet)"
+              continue
+            fi
+
+            # Create class name: 3.5.0-preview1 -> 350Preview1
+            # Remove dots and hyphens, capitalize preview/rc
+            class_version=$(echo "$version" | sed 's/\.//g; s/-//g; s/preview/Preview/i; s/rc/Rc/i')
+
+            echo "Creating formula for Ruby $version"
+            printf 'require File.expand_path("../Abstract/jdx-ruby", __dir__)\n\nclass JdxRubyAT%s < JdxRuby\n  url "%s"\n  sha256 "%s"\n  version "%s"\nend\n' \
+              "$class_version" "$tarball_url" "$sha256" "$version" > "$formula_file"
+
+            git add "$formula_file"
+            git commit -m "Add jdx-ruby@${version}"
+            echo "Created $formula_file"
+          done
+
       - name: Push changes
         run: git push
