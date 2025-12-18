@@ -78,8 +78,8 @@ jobs:
           mkdir -p extracted
           tar -xzf "$tarball" -C extracted
 
-          # Sign all Mach-O binaries
-          find extracted -type f | while read -r file; do
+          # Sign all Mach-O binaries (skip .dSYM debug symbols)
+          find extracted -type f -not -path "*.dSYM/*" | while read -r file; do
             if file "$file" | grep -q "Mach-O"; then
               echo "Signing $file"
               codesign --sign "Developer ID Application: Jeffrey Dickey (4993Y37DX6)" \
