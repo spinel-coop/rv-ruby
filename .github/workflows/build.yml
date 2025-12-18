@@ -72,9 +72,9 @@ jobs:
           mkdir -p rubies/
           cd rubies
           if [[ -n "${{ matrix.arch }}" ]]; then
-            echo arch -${{ matrix.arch }} brew rv-package --verbose ${{ inputs.formula }}
+            arch -${{ matrix.arch }} brew rv-package --verbose ${{ inputs.formula }}
           else
-            echo brew rv-package --verbose ${{ inputs.formula }}
+            brew rv-package --verbose ${{ inputs.formula }}
           fi
 
       - name: Upload rv Ruby
