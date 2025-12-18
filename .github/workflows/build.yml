@@ -25,13 +25,10 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-22.04
-            arch:
           - runner: ubuntu-22.04-arm
-            arch:
+          - runner: macos-14
           - runner: macos-14
             arch: x86_64
-          - runner: macos-14
-            arch: arm64
       fail-fast: false
     runs-on: ${{ matrix.runner }}
     steps:
@@ -73,13 +70,12 @@ jobs:
           if [[ -n "${{ steps.setup-ruby.outputs.ruby-prefix }}" ]]; then
             export HOMEBREW_BASERUBY="${{ steps.setup-ruby.outputs.ruby-prefix }}/bin/ruby"
           fi
+          if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
+            export PATH="/usr/local/bin:${PATH}"
+          fi
           mkdir -p rubies/
           cd rubies
-          if [[ -n "${{ matrix.arch }}" ]]; then
-            arch -${{ matrix.arch }} brew rv-package --verbose ${{ inputs.formula }}
-          else
-            brew rv-package --verbose ${{ inputs.formula }}
-          fi
+          brew rv-package --verbose ${{ inputs.formula }}
 
       - name: Upload rv Ruby
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
