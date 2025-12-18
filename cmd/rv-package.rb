@@ -44,17 +44,17 @@ module Homebrew
 
           begin
             # Install build deps (but not static-linked deps) from bottles, to save compilation time
-            bottled_dep_allowlist = /\A(?:glibc@|linux-headers@|ruby@|rustup|autoconf|pkgconf|bison)/
+            bottled_dep_blocklist = /portable-/
             deps = Dependency.expand(Formula[name], cache_key: "rv-package-#{name}") do |_dependent, dep|
               Dependency.prune if dep.test? || dep.optional?
               Dependency.prune if dep.name == "rustup" && args.without_yjit?
 
-              next unless bottled_dep_allowlist.match?(dep.name)
+              next if bottled_dep_blocklist.match?(dep.name)
 
               Dependency.keep_but_prune_recursive_deps
             end.map(&:name)
 
-            bottled_deps, deps = deps.partition { |dep| bottled_dep_allowlist.match?(dep) }
+            deps, bottled_deps = deps.partition { |dep| bottled_dep_blocklist.match?(dep) }
             puts "Bottled deps: #{bottled_deps.inspect}"
             puts "Other deps: #{deps.inspect}"
 
