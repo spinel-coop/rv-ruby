@@ -25,8 +25,11 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-22.04
+            arch: x86_64
           - runner: ubuntu-22.04-arm
+            arch: arm64
           - runner: macos-14
+            arch: arm64
           - runner: macos-14
             arch: x86_64
       fail-fast: false
@@ -52,7 +55,7 @@ jobs:
 
       - name: Install Homebrew
         run: |
-          if [[ -n "${{ matrix.arch }}" ]]; then
+          if [[ "${{ matrix.runner }}" == "macos"* && -n "${{ matrix.arch }}" ]]; then
             arch -${{ matrix.arch }} /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           else
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -80,7 +83,7 @@ jobs:
       - name: Upload rv Ruby
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: ${{ inputs.formula }}_${{ matrix.runner }}
+          name: ${{ inputs.formula }}_${{ matrix.runner }}_${{ matrix.arch }}
           path: ${{ github.workspace }}/rubies
 
       - name: Test Portable Ruby
