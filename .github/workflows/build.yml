@@ -63,16 +63,16 @@ jobs:
           fi
 
       - name: Tap repo
-        run: bin/setup
+        run: |
+          [[ "${{ matrix.arch }}" == "x86_64" ]] && export PATH="/usr/local/bin:${PATH}"
+          bin/setup
 
       - name: Build rv Ruby
         run: |
           if [[ -n "${{ steps.setup-ruby.outputs.ruby-prefix }}" ]]; then
             export HOMEBREW_BASERUBY="${{ steps.setup-ruby.outputs.ruby-prefix }}/bin/ruby"
           fi
-          if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
-            export PATH="/usr/local/bin:${PATH}"
-          fi
+          [[ "${{ matrix.arch }}" == "x86_64" ]] && export PATH="/usr/local/bin:${PATH}"
           mkdir -p rubies/
           cd rubies
           brew rv-package --verbose ${{ inputs.formula }}
