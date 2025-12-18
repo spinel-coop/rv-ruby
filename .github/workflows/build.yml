@@ -55,7 +55,11 @@ jobs:
 
       - name: Install Homebrew
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          if [[ -n "${{ matrix.arch }}" ]]; then
+            arch -${{ matrix.arch }} /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          else
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
           if [[ -d /home/linuxbrew ]]; then
             echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
             echo "/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
@@ -65,25 +69,17 @@ jobs:
         run: bin/setup
 
       - name: Build rv Ruby
-        if: ${{ matrix.arch == '' }}
         run: |
           if [[ -n "${{ steps.setup-ruby.outputs.ruby-prefix }}" ]]; then
             export HOMEBREW_BASERUBY="${{ steps.setup-ruby.outputs.ruby-prefix }}/bin/ruby"
           fi
           mkdir -p rubies/
           cd rubies
-          brew rv-package --verbose ${{ inputs.formula }}
-
-      - name: Cross-build rv Ruby
-        if: ${{ matrix.arch != '' }}
-        shell: arch -${{ matrix.arch }} zsh
-        run: |
-          if [[ -n "${{ steps.setup-ruby.outputs.ruby-prefix }}" ]]; then
-            export HOMEBREW_BASERUBY="${{ steps.setup-ruby.outputs.ruby-prefix }}/bin/ruby"
+          if [[ -n "${{ matrix.arch }}" ]]; then
+            arch -${{ matrix.arch }} brew rv-package --verbose ${{ inputs.formula }}
+          else
+            brew rv-package --verbose ${{ inputs.formula }}
           fi
-          mkdir -p rubies/
-          cd rubies
-          brew rv-package --verbose ${{ inputs.formula }}
 
       - name: Upload rv Ruby
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
