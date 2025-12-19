@@ -176,6 +176,15 @@ class JdxRuby < Formula
       cp libxcrypt.lib/"libcrypt.a", lib/"libcrypt.a"
     end
 
+    # Add bundled include/lib paths to rbconfig for native gem compilation
+    # This allows gems like openssl and psych to find headers
+    inreplace lib/"ruby/#{abi_version}/#{abi_arch}/rbconfig.rb" do |s|
+      # Prepend our include dir to CPPFLAGS
+      s.gsub!(/"CPPFLAGS" => "/, "\"CPPFLAGS\" => \"-I#{prefix}/include ")
+      # Prepend our lib dir to LDFLAGS
+      s.gsub!(/"LDFLAGS" => "/, "\"LDFLAGS\" => \"-L#{prefix}/lib ")
+    end
+
     libexec.mkpath
     cp openssl.libexec/"etc/openssl/cert.pem", libexec/"cert.pem"
     openssl_rb = lib/"ruby/#{abi_version}/openssl.rb"

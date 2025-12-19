@@ -134,6 +134,8 @@ module Homebrew
               new_top = "#{tmpdir}/ruby-#{version}"
               FileUtils.mv inner_dir, new_top
               FileUtils.rm_rf outer_dir
+              # Copy headers from portable dependencies for native gem compilation
+              copy_portable_headers(new_top)
               system "tar", "-czf", r, "-C", tmpdir, "ruby-#{version}"
             else
               # Fallback: just rename without restructuring
@@ -141,6 +143,38 @@ module Homebrew
             end
           end
           FileUtils.rm_f f if File.exist?(f) && f != r
+        end
+      end
+
+      def copy_portable_headers(ruby_dir)
+        include_dir = File.join(ruby_dir, "include")
+        FileUtils.mkdir_p(include_dir)
+
+        # Dependencies that provide headers needed for native gems
+        portable_deps = [
+          "portable-openssl",
+          "portable-libyaml",
+        ]
+
+        # Linux needs additional headers
+        if OS.linux?
+          portable_deps += [
+            "portable-libffi",
+            "portable-zlib",
+            "portable-libxcrypt",
+          ]
+        end
+
+        portable_deps.each do |dep_pattern|
+          # Find the installed formula matching this pattern
+          formula = Formula.installed.find { |f| f.name.start_with?(dep_pattern) }
+          next unless formula
+
+          src_include = formula.opt_include
+          if src_include.exist?
+            # Copy all headers from the dependency
+            FileUtils.cp_r(Dir.glob("#{src_include}/*"), include_dir)
+          end
         end
       end
     end
