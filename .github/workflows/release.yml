@@ -116,12 +116,12 @@ jobs:
         working-directory: rubies
         run: |
           shopt -s nullglob
-          files=(./*.tar.gz)
+          files=(*.tar.gz)
           if (( ${#files[@]} == 0 )); then
             echo "No tarballs found in rubies/" >&2
             exit 1
           fi
-          shasum -a 256 "${files[@]}" | sed 's| \./|  |' > SHA256SUMS
+          shasum -a 256 -- "${files[@]}" > SHA256SUMS
 
       - name: Upload to GitHub Packages
         if: ${{ inputs.formula == '' || inputs.formula == 'rv-ruby-dev' }}
@@ -162,14 +162,15 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: gh release upload "${TAG}" rubies/SHA256SUMS --clobber
 
-      - name: Verify checksums upload integrity
+      - name: Verify checksums
         if: ${{ inputs.formula == '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+        working-directory: rubies
         run: |
           gh release download "${TAG}" --pattern SHA256SUMS --dir /tmp/verify --clobber
-          diff rubies/SHA256SUMS /tmp/verify/SHA256SUMS
-          echo "SHA256SUMS round-trip verification passed"
+          diff SHA256SUMS /tmp/verify/SHA256SUMS
+          shasum -a 256 -c /tmp/verify/SHA256SUMS
 
       - name: Generate release artifact provenance attestations
         if: ${{ inputs.formula == '' }}
