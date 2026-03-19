@@ -22,8 +22,13 @@ module PortableFormulaMixin
         EOS
       end
 
-      # Always prefer to linking to portable libs.
-      ENV.append "LDFLAGS", "-Wl,-search_paths_first"
+      # As of 2026-03-19, configure fails on intel with the error message
+      #   configure: error: something wrong with LDFLAGS="-Wl,-search_paths_first"
+      # So we're going to delete it, even though that worked in the last 30 daily builds.
+      ruby_dev_on_intel = Hardware::CPU.intel? && stable == @head
+
+      # Prefer to linking to portable libs.
+      ENV.append "LDFLAGS", "-Wl,-search_paths_first" unless ruby_dev_on_intel
     elsif OS.linux?
       # reset Linuxbrew env, because we want to build formula against
       # libraries offered by system (CentOS docker) rather than Linuxbrew.
