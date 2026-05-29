@@ -49,7 +49,7 @@ jobs:
           fi
 
       # Static gem extensions typically require the same Ruby version available already
-      - uses: ruby/setup-ruby@6aaa311d81eba98ae12eaffbcb63296ace0efcde # v1.307.0
+      - uses: ruby/setup-ruby@afeafc3d1ab54a631816aba4c914a0081c12ff2f # v1.310.0
         id: setup-ruby
         if: ${{ env.SETUP_RUBY_VERSION != '' }}
         with:
