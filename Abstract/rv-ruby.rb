@@ -31,7 +31,7 @@ class RvRuby < Formula
       depends_on "rustup" => :build unless build.without?("yjit") && build.without?("zjit")
       depends_on "pkgconf" => :build
       depends_on "portable-libyaml@0.2.5" => :build
-      depends_on "portable-openssl" => :build
+      depends_on "rv-portable-openssl" => :build
 
       skip_clean "lib/ruby/gems"
 
@@ -101,7 +101,7 @@ class RvRuby < Formula
 
     dep_names = deps.map(&:name)
     libyaml = Formula[dep_names.find { |d| d.start_with?("portable-libyaml") }]
-    openssl = Formula[dep_names.find { |d| d.start_with?("portable-openssl") }]
+    openssl = Formula["rv-portable-openssl"]
 
     args = %W[
       --prefix=#{prefix}
