@@ -5,7 +5,6 @@ class PortableOpensslAT351 < PortableFormula
   homepage "https://openssl.org/"
   url "https://github.com/openssl/openssl/releases/download/openssl-3.5.1/openssl-3.5.1.tar.gz"
   mirror "https://www.openssl.org/source/openssl-3.5.1.tar.gz"
-  mirror "http://fresh-center.net/linux/misc/openssl-3.5.1.tar.gz"
   sha256 "529043b15cffa5f36077a4d0af83f3de399807181d607441d734196d889b641f"
   license "Apache-2.0"
 
