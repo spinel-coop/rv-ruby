@@ -36,7 +36,7 @@ class RvRuby < Formula
       skip_clean "lib/ruby/gems"
 
       on_linux do
-        depends_on "portable-libffi@3.5.1" => :build
+        depends_on "rv-portable-libffi" => :build
         depends_on "portable-libxcrypt@4.4.38" => :build
         depends_on "portable-zlib@1.3.2" => :build
 
@@ -123,7 +123,7 @@ class RvRuby < Formula
     ]
 
     if OS.linux?
-      libffi = Formula[dep_names.find { |d| d.start_with?("portable-libffi") }]
+      libffi = Formula["rv-portable-libffi"]
       libxcrypt = Formula[dep_names.find { |d| d.start_with?("portable-libxcrypt") }]
       zlib = Formula[dep_names.find { |d| d.start_with?("portable-zlib") }]
 
