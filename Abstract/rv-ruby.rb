@@ -28,7 +28,7 @@ class RvRuby < Formula
       depends_on "rustup" => :build unless build.without?("yjit") && build.without?("zjit")
       depends_on "pkgconf" => :build
       depends_on "portable-libyaml@0.2.5" => :build
-      depends_on "portable-openssl@3.5.1" => :build
+      depends_on "portable-openssl" => :build
 
       skip_clean "lib/ruby/gems"
 

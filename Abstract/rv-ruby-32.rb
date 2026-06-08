@@ -27,13 +27,13 @@ class RvRuby32 < Formula
       depends_on "rustup" => :build unless build.without? "yjit"
       depends_on "pkgconf" => :build
       depends_on "portable-libyaml@0.2.5" => :build
-      depends_on "portable-openssl@3.5.1" => :build
+      depends_on "portable-openssl" => :build
 
       skip_clean "lib/ruby/gems"
 
       on_linux do
         depends_on "portable-libedit" => :build
-        depends_on "portable-libffi@3.5.1" => :build
+        depends_on "portable-libffi" => :build
         depends_on "portable-libxcrypt@4.4.38" => :build
         depends_on "portable-zlib@1.3.2" => :build
 
