@@ -29,8 +29,8 @@ class RvRuby32 < Formula
 
       depends_on "rustup" => :build unless build.without? "yjit"
       depends_on "pkgconf" => :build
-      depends_on "portable-libyaml@0.2.5" => :build
       depends_on "rv-portable-openssl" => :build
+      depends_on "rv-portable-libyaml" => :build
 
       skip_clean "lib/ruby/gems"
 
@@ -97,7 +97,7 @@ class RvRuby32 < Formula
     File.write("gems/bundled_gems", bundled_gems.join)
 
     dep_names = deps.map(&:name)
-    libyaml = Formula[dep_names.find { |d| d.start_with?("portable-libyaml") }]
+    libyaml = Formula["rv-portable-libyaml"]
     openssl = Formula["rv-portable-openssl"]
 
     args = %W[

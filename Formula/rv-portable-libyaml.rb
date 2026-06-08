@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableLibyamlAT025 < PortableFormula
+class RvPortableLibyaml < PortableFormula
   desc "YAML Parser"
   homepage "https://github.com/yaml/libyaml"
   url "https://github.com/yaml/libyaml/releases/download/0.2.5/yaml-0.2.5.tar.gz"
@@ -12,7 +12,8 @@ class PortableLibyamlAT025 < PortableFormula
   end
 
   def install
-    system "./configure", "--disable-dependency-tracking",
+    system "./configure", *portable_configure_args,
+                          "--disable-dependency-tracking",
                           "--prefix=#{prefix}",
                           "--enable-static",
                           "--disable-shared"
