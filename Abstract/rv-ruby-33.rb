@@ -1,3 +1,6 @@
+# typed: strict
+# frozen_string_literal: true
+
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
 # on macOS, Ruby builds require a BASERUBY already available on the system with
@@ -75,12 +78,12 @@ class RvRuby33 < Formula
     end
   end
 
- def install
+  def install
     if build.with? "yjit"
       # share RUSTUP_HOME across installs if provided
       ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
       ENV["RUSTUP_TOOLCHAIN"] = "1.58"
-      system "rustup install 1.58 --profile minimal" unless system("which rustc")
+      system "rustup", "install", "1.58", "--profile", "minimal" unless system("which", "rustc")
     end
 
     bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
@@ -93,8 +96,8 @@ class RvRuby33 < Formula
     File.write("gems/bundled_gems", bundled_gems.join)
 
     dep_names = deps.map(&:name)
-    libyaml = Formula[dep_names.find{|d| d.start_with?("portable-libyaml") }]
-    openssl = Formula[dep_names.find{|d| d.start_with?("portable-openssl") }]
+    libyaml = Formula[dep_names.find { |d| d.start_with?("portable-libyaml") }]
+    openssl = Formula[dep_names.find { |d| d.start_with?("portable-openssl") }]
 
     args = %W[
       --prefix=#{prefix}
@@ -107,16 +110,16 @@ class RvRuby33 < Formula
     ]
 
     if OS.mac?
-      baseruby = ENV["HOMEBREW_BASERUBY"]
-      baseruby_version = baseruby && %x[#{baseruby} -v]
-      if baseruby && baseruby_version =~ /#{Regexp.escape(version)}/
-        args += %W[--with-baseruby=#{baseruby}]
+      baseruby = ENV.fetch("HOMEBREW_BASERUBY", nil)
+      baseruby_version = baseruby && `#{baseruby} -v`
+      args += if baseruby && baseruby_version =~ /#{Regexp.escape(version)}/
+        %W[--with-baseruby=#{baseruby}]
       else
-        args += %W[--with-baseruby=#{RbConfig.ruby}]
+        %W[--with-baseruby=#{RbConfig.ruby}]
       end
     end
 
-    args += %W[--enable-yjit] unless build.without? "yjit"
+    args += %w[--enable-yjit] unless build.without? "yjit"
 
     # We don't specify OpenSSL as we want it to use the pkg-config, which `--with-openssl-dir` will disable
     args += %W[
@@ -124,9 +127,9 @@ class RvRuby33 < Formula
     ]
 
     if OS.linux?
-      libffi = Formula[dep_names.find{|d| d.start_with?("portable-libffi") }]
-      libxcrypt = Formula[dep_names.find{|d| d.start_with?("portable-libxcrypt") }]
-      zlib = Formula[dep_names.find{|d| d.start_with?("portable-zlib") }]
+      libffi = Formula[dep_names.find { |d| d.start_with?("portable-libffi") }]
+      libxcrypt = Formula[dep_names.find { |d| d.start_with?("portable-libxcrypt") }]
+      zlib = Formula[dep_names.find { |d| d.start_with?("portable-zlib") }]
 
       ENV["XCFLAGS"] = "-I#{libxcrypt.opt_include}"
       ENV["XLDFLAGS"] = "-L#{libxcrypt.opt_lib}"
@@ -201,15 +204,15 @@ class RvRuby33 < Formula
     assert_equal version.to_s.split("-").first, shell_output("#{ruby} -e 'puts RUBY_VERSION'").chomp
     assert_equal ruby.to_s, shell_output("#{ruby} -e 'puts RbConfig.ruby'").chomp
     assert_equal "3632233996",
-      shell_output("#{ruby} -rzlib -e 'puts Zlib.crc32(\"test\")'").chomp
+                 shell_output("#{ruby} -rzlib -e 'puts Zlib.crc32(\"test\")'").chomp
     assert_equal " \t\n`><=;|&{(",
-      shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
+                 shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
     assert_equal '{"a"=>"b"}',
-      shell_output("#{ruby} -ryaml -e 'puts YAML.load(\"a: b\")'").chomp
+                 shell_output("#{ruby} -ryaml -e 'puts YAML.load(\"a: b\")'").chomp
     assert_equal "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      shell_output("#{ruby} -ropenssl -e 'puts OpenSSL::Digest::SHA256.hexdigest(\"\")'").chomp
+                 shell_output("#{ruby} -ropenssl -e 'puts OpenSSL::Digest::SHA256.hexdigest(\"\")'").chomp
     assert_match "200",
-      shell_output("#{ruby} -ropen-uri -e 'URI.open(\"https://google.com\") { |f| puts f.status.first }'").chomp
+                 shell_output("#{ruby} -ropen-uri -e 'URI.open(\"https://google.com\") { |f| puts f.status.first }'").chomp
     system ruby, "-rrbconfig", "-e", <<~EOS
       Gem.discover_gems_on_require = false
       require "portable_ruby_gems"
@@ -222,7 +225,7 @@ class RvRuby33 < Formula
     # install gem with native components
     system testpath/"bin/gem", "install", "byebug"
     assert_match "byebug",
-      shell_output("#{testpath}/bin/byebug --version")
+                 shell_output("#{testpath}/bin/byebug --version")
 
     super
   end
