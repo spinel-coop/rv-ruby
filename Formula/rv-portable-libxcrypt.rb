@@ -1,10 +1,10 @@
-require File.expand_path("../Abstract/portable-formula", __dir__)
+require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
-class PortableLibxcryptAT4438 < PortableFormula
+class RvPortableLibxcrypt < PortableFormula
   desc "Extended crypt library for descrypt, md5crypt, bcrypt, and others"
   homepage "https://github.com/besser82/libxcrypt"
-  url "https://github.com/besser82/libxcrypt/releases/download/v4.4.38/libxcrypt-4.4.38.tar.xz"
-  sha256 "80304b9c306ea799327f01d9a7549bdb28317789182631f1b54f4511b4206dd6"
+  url "https://github.com/besser82/libxcrypt/releases/download/v4.5.2/libxcrypt-4.5.2.tar.xz"
+  sha256 "71513a31c01a428bccd5367a32fd95f115d6dac50fb5b60c779d5c7942aec071"
   license "LGPL-2.1-or-later"
 
   livecheck do
@@ -12,7 +12,8 @@ class PortableLibxcryptAT4438 < PortableFormula
   end
 
   def install
-    system "./configure", *std_configure_args,
+    system "./configure", *portable_configure_args,
+                          *std_configure_args,
                           "--enable-static",
                           "--disable-shared",
                           "--disable-obsolete-api",

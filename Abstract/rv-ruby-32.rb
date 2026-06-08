@@ -37,7 +37,7 @@ class RvRuby32 < Formula
       on_linux do
         depends_on "rv-portable-libedit" => :build
         depends_on "rv-portable-libffi" => :build
-        depends_on "portable-libxcrypt@4.4.38" => :build
+        depends_on "rv-portable-libxcrypt" => :build
         depends_on "portable-zlib@1.3.2" => :build
 
         if build.without? "yjit"
@@ -137,7 +137,7 @@ class RvRuby32 < Formula
 
     if OS.linux?
       libffi = Formula["rv-portable-libffi"]
-      libxcrypt = Formula[dep_names.find { |d| d.start_with?("portable-libxcrypt") }]
+      libxcrypt = Formula["rv-portable-libxcrypt"]
       zlib = Formula[dep_names.find { |d| d.start_with?("portable-zlib") }]
       libedit = Formula["rv-portable-libedit"]
 
