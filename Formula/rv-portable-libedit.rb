@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/portable-formula", __dir__)
 
-class PortableLibedit < PortableFormula
+class RvPortableLibedit < PortableFormula
   desc "BSD-style licensed readline alternative"
   homepage "https://thrysoee.dk/editline/"
   url "https://thrysoee.dk/editline/libedit-20221009-3.1.tar.gz"

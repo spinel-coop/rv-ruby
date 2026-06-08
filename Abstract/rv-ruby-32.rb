@@ -35,7 +35,7 @@ class RvRuby32 < Formula
       skip_clean "lib/ruby/gems"
 
       on_linux do
-        depends_on "portable-libedit" => :build
+        depends_on "rv-portable-libedit" => :build
         depends_on "portable-libffi@3.5.1" => :build
         depends_on "portable-libxcrypt@4.4.38" => :build
         depends_on "portable-zlib@1.3.2" => :build
@@ -139,7 +139,7 @@ class RvRuby32 < Formula
       libffi = Formula[dep_names.find { |d| d.start_with?("portable-libffi") }]
       libxcrypt = Formula[dep_names.find { |d| d.start_with?("portable-libxcrypt") }]
       zlib = Formula[dep_names.find { |d| d.start_with?("portable-zlib") }]
-      libedit = Formula[dep_names.find { |d| d.start_with?("portable-libedit") }]
+      libedit = Formula["rv-portable-libedit"]
 
       ENV["XCFLAGS"] = "-I#{libxcrypt.opt_include}"
       ENV["XLDFLAGS"] = "-L#{libxcrypt.opt_lib}"
