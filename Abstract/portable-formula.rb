@@ -25,15 +25,24 @@ module PortableFormulaMixin
       # Always prefer to linking to portable libs.
       ENV.append "LDFLAGS", "-Wl,-search_paths_first"
     elsif OS.linux?
-      # reset Linuxbrew env, because we want to build formula against
-      # libraries offered by system (CentOS docker) rather than Linuxbrew.
-      ENV.delete "LDFLAGS"
-      ENV.delete "LIBRARY_PATH"
-      ENV.delete "LD_RUN_PATH"
-      ENV.delete "LD_LIBRARY_PATH"
-      ENV.delete "TERMINFO_DIRS"
-      ENV.delete "HOMEBREW_RPATH_PATHS"
-      ENV.delete "HOMEBREW_DYNAMIC_LINKER"
+      # We want our Ruby to link against generic linux glibc etc,
+      # not against the Homebrew-provided glibc etc, for portability.
+      # To ensure that, we clear out all the env vars Homebrew uses
+      # to redirect links to the Homebrew-provided libs instead.
+      %w[
+        LDFLAGS LIBRARY_PATH LD_RUN_PATH LD_LIBRARY_PATH
+        TERMINFO_DIRS HOMEBREW_RPATH_PATHS HOMEBREW_DYNAMIC_LINKER
+      ].each { |k| ENV.delete(k) }
+
+      # By forcing the OS-level tools, we avoid the possibility that our
+      # Ruby binaries will link against the Homebrew-provided libs.
+      ENV["CC"] = "/usr/bin/cc"
+      ENV["CXX"] = "/usr/bin/c++"
+      ENV["CPP"] = "/usr/bin/cpp"
+
+      # We don't clear PATH or PKG_CONFIG_PATH, because we also need some
+      # brew-provided tools (like autoconf and pkgconf), plus the portable-*
+      # libs that we are going to link statically.
 
       # https://github.com/Homebrew/homebrew-portable-ruby/issues/118
       ENV.append_to_cflags "-fPIC"
