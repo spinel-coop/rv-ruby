@@ -9,3 +9,4 @@ fi
 brew tap "spinel-coop/$DIRNAME" .
 rm -rf "$(brew --repo)/Library/Taps/spinel-coop/homebrew-$DIRNAME"
 ln -sf "$(pwd)" "$(brew --repo)/Library/Taps/spinel-coop/homebrew-$DIRNAME"
+brew trust "spinel-coop/$DIRNAME"
