@@ -37,7 +37,7 @@ class RvRuby33 < Formula
       on_linux do
         depends_on "rv-portable-libffi" => :build
         depends_on "rv-portable-libxcrypt" => :build
-        depends_on "portable-zlib@1.3.2" => :build
+        depends_on "rv-portable-zlib" => :build
 
         if build.without? "yjit"
           on_intel do
@@ -129,7 +129,7 @@ class RvRuby33 < Formula
     if OS.linux?
       libffi = Formula["rv-portable-libffi"]
       libxcrypt = Formula["rv-portable-libxcrypt"]
-      zlib = Formula[dep_names.find { |d| d.start_with?("portable-zlib") }]
+      zlib = Formula["rv-portable-zlib"]
 
       ENV["XCFLAGS"] = "-I#{libxcrypt.opt_include}"
       ENV["XLDFLAGS"] = "-L#{libxcrypt.opt_lib}"

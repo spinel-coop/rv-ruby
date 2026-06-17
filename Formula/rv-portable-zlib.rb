@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
-class PortableZlibAT132 < RvPortableFormula
+class RvPortableZlib < RvPortableFormula
   desc "General-purpose lossless data-compression library"
   homepage "https://zlib.net/"
   url "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"
