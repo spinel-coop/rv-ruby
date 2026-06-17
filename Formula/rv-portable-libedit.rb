@@ -9,7 +9,7 @@ class RvPortableLibedit < RvPortableFormula
   license "BSD-3-Clause"
 
   on_linux do
-    depends_on "portable-ncurses" => :build
+    depends_on "rv-portable-ncurses" => :build
   end
 
   def install
