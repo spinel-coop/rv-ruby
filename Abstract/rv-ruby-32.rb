@@ -1,7 +1,7 @@
 # typed: strict
 # frozen_string_literal: true
 
-require File.expand_path("../Abstract/portable-formula", __dir__)
+require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
 # on macOS, Ruby builds require a BASERUBY already available on the system with
 # the same version. I wasn't able to get the Homebrew formula for ruby working
@@ -75,7 +75,7 @@ class RvRuby32 < Formula
         end
       end
 
-      prepend PortableFormulaMixin
+      prepend RvPortableFormulaMixin
     end
   end
 

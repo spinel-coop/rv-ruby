@@ -1,6 +1,6 @@
 require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
-class RvPortableLibxcrypt < PortableFormula
+class RvPortableLibxcrypt < RvPortableFormula
   desc "Extended crypt library for descrypt, md5crypt, bcrypt, and others"
   homepage "https://github.com/besser82/libxcrypt"
   url "https://github.com/besser82/libxcrypt/releases/download/v4.5.2/libxcrypt-4.5.2.tar.xz"

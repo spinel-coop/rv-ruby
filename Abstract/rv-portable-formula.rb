@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module PortableFormulaMixin
+module RvPortableFormulaMixin
   if OS.mac?
     if Hardware::CPU.arm?
       TARGET_MACOS = :big_sur
@@ -71,7 +71,7 @@ module PortableFormulaMixin
   end
 end
 
-class PortableFormula < Formula
+class RvPortableFormula < Formula
   desc "Abstract portable formula"
   homepage "https://github.com/Homebrew/homebrew-portable-ruby"
 
@@ -91,7 +91,7 @@ class PortableFormula < Formula
         depends_on "linux-headers@4.4" => :build
       end
 
-      prepend PortableFormulaMixin
+      prepend RvPortableFormulaMixin
     end
   end
 end

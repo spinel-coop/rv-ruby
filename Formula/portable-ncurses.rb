@@ -1,6 +1,6 @@
-require File.expand_path("../Abstract/portable-formula", __dir__)
+require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
-class PortableNcurses < PortableFormula
+class PortableNcurses < RvPortableFormula
   desc "Text-based UI library"
   homepage "https://invisible-island.net/ncurses/announce.html"
   url "https://ftp.gnu.org/gnu/ncurses/ncurses-6.3.tar.gz"
