@@ -16,7 +16,7 @@ class RvRuby < Formula
 
       # This regex restricts matching to versions other than X.Y.0.
       livecheck do
-        formula "ruby"
+        url "https://www.ruby-lang.org/en/downloads/releases/"
         regex(/href=.*?ruby[._-]v?(\d+\.\d+\.(?:(?!0)\d+)(?:\.\d+)*)\.t/i)
       end
 
