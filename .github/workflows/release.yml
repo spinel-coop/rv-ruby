@@ -97,6 +97,7 @@ jobs:
           echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           brew tap spinel-coop/rv-ruby .
+          brew trust spinel-coop/rv-ruby
 
       - name: Checkout branch
         run: git checkout "${GITHUB_REF_NAME}"
