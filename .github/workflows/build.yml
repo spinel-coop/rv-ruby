@@ -28,8 +28,8 @@ jobs:
         runner:
           - macos-15-intel # intel
           - macos-14 # arm
-          - ubuntu-22.04
-          - ubuntu-22.04-arm
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
       fail-fast: false
     runs-on: ${{ matrix.runner }}
     steps:
