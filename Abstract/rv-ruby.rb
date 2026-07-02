@@ -1,4 +1,7 @@
-require File.expand_path("../Abstract/portable-formula", __dir__)
+# typed: strict
+# frozen_string_literal: true
+
+require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
 # on macOS, Ruby builds require a BASERUBY already available on the system with
 # the same version. I wasn't able to get the Homebrew formula for ruby working
@@ -27,15 +30,15 @@ class RvRuby < Formula
 
       depends_on "rustup" => :build unless build.without?("yjit") && build.without?("zjit")
       depends_on "pkgconf" => :build
-      depends_on "portable-libyaml@0.2.5" => :build
-      depends_on "portable-openssl@3.5.1" => :build
+      depends_on "rv-portable-openssl" => :build
+      depends_on "rv-portable-libyaml" => :build
 
       skip_clean "lib/ruby/gems"
 
       on_linux do
-        depends_on "portable-libffi@3.5.1" => :build
-        depends_on "portable-libxcrypt@4.4.38" => :build
-        depends_on "portable-zlib@1.3.2" => :build
+        depends_on "rv-portable-libffi" => :build
+        depends_on "rv-portable-libxcrypt" => :build
+        depends_on "rv-portable-zlib" => :build
 
         if build.without?("yjit") && build.without?("zjit")
           on_intel do
@@ -70,10 +73,9 @@ class RvRuby < Formula
             json.first["number"]
           end
         end
-
       end
 
-      prepend PortableFormulaMixin
+      prepend RvPortableFormulaMixin
     end
   end
 
@@ -82,14 +84,14 @@ class RvRuby < Formula
     ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
     if build.with? "zjit"
       ENV["RUSTUP_TOOLCHAIN"] = "1.85"
-      system "rustup install 1.85 --profile minimal" unless system("which rustc")
+      system "rustup", "install", "1.85", "--profile", "minimal" unless system("which", "rustc")
     elsif build.with? "yjit"
       ENV["RUSTUP_TOOLCHAIN"] = "1.58"
-      system "rustup install 1.58 --profile minimal" unless system("which rustc")
+      system "rustup", "install", "1.58", "--profile", "minimal" unless system("which", "rustc")
     end
 
     bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
-      line.blank? || line.start_with?("#") || line =~ /win32/
+      line.blank? || line.start_with?("#") || line.include?("win32")
     end
     resources.each do |resource|
       resource.stage "gems"
@@ -98,8 +100,8 @@ class RvRuby < Formula
     File.write("gems/bundled_gems", bundled_gems.join)
 
     dep_names = deps.map(&:name)
-    libyaml = Formula[dep_names.find{|d| d.start_with?("portable-libyaml") }]
-    openssl = Formula[dep_names.find{|d| d.start_with?("portable-openssl") }]
+    libyaml = Formula["rv-portable-libyaml"]
+    openssl = Formula["rv-portable-openssl"]
 
     args = %W[
       --prefix=#{prefix}
@@ -112,8 +114,8 @@ class RvRuby < Formula
       --disable-dependency-tracking
     ]
 
-    args += %W[--enable-yjit] unless build.without? "yjit"
-    args += %W[--enable-zjit] unless build.without? "zjit"
+    args += %w[--enable-yjit] unless build.without? "yjit"
+    args += %w[--enable-zjit] unless build.without? "zjit"
 
     # We don't specify OpenSSL as we want it to use the pkg-config, which `--with-openssl-dir` will disable
     args += %W[
@@ -121,9 +123,9 @@ class RvRuby < Formula
     ]
 
     if OS.linux?
-      libffi = Formula[dep_names.find{|d| d.start_with?("portable-libffi") }]
-      libxcrypt = Formula[dep_names.find{|d| d.start_with?("portable-libxcrypt") }]
-      zlib = Formula[dep_names.find{|d| d.start_with?("portable-zlib") }]
+      libffi = Formula["rv-portable-libffi"]
+      libxcrypt = Formula["rv-portable-libxcrypt"]
+      zlib = Formula["rv-portable-zlib"]
 
       ENV["XCFLAGS"] = "-I#{libxcrypt.opt_include}"
       ENV["XLDFLAGS"] = "-L#{libxcrypt.opt_lib}"
@@ -173,8 +175,8 @@ class RvRuby < Formula
       inreplace lib/"ruby/#{abi_version}/#{abi_arch}/rbconfig.rb" do |s|
         s.gsub! ENV.cxx, "c++"
         s.gsub! ENV.cc, "cc"
-        # Change e.g. `CONFIG["AR"] = "gcc-ar-11"` to `CONFIG["AR"] = "ar"`
-        s.gsub!(/(CONFIG\[".+"\] = )"gcc-(.*)-\d+"/, '\\1"\\2"')
+        # Change e.g. `CONFIG["AR"] = "gcc-ar-11"` to `CONFIG["AR"] = "ar"`.
+        s.gsub!(/(CONFIG\[".+"\] = )"gcc-(.*)-\d+"/, '\\1"\\2"', audit_result: false)
         # C++ compiler might have been disabled because we break it with glibc@* builds
         s.sub!(/(CONFIG\["CXX"\] = )"false"/, '\\1"c++"') if build.without?("yjit") && build.without?("zjit")
       end
@@ -196,20 +198,20 @@ class RvRuby < Formula
     cp_r Dir["#{prefix}/*"], testpath
     ENV["PATH"] = "/usr/bin:/bin"
     ruby = (testpath/"bin/ruby").realpath
-    unless version.to_s =~ /head/i
+    unless /head/i.match?(version.to_s)
       assert_equal version.to_s.split("-").first, shell_output("#{ruby} -e 'puts RUBY_VERSION'").chomp
     end
     assert_equal ruby.to_s, shell_output("#{ruby} -e 'puts RbConfig.ruby'").chomp
     assert_equal "3632233996",
-      shell_output("#{ruby} -rzlib -e 'puts Zlib.crc32(\"test\")'").chomp
+                 shell_output("#{ruby} -rzlib -e 'puts Zlib.crc32(\"test\")'").chomp
     assert_equal " \t\n`><=;|&{(",
-      shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
+                 shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
     assert_equal '{"a" => "b"}',
-      shell_output("#{ruby} -ryaml -e 'puts YAML.load(\"a: b\")'").chomp
+                 shell_output("#{ruby} -ryaml -e 'puts YAML.load(\"a: b\")'").chomp
     assert_equal "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      shell_output("#{ruby} -ropenssl -e 'puts OpenSSL::Digest::SHA256.hexdigest(\"\")'").chomp
+                 shell_output("#{ruby} -ropenssl -e 'puts OpenSSL::Digest::SHA256.hexdigest(\"\")'").chomp
     assert_match "200",
-      shell_output("#{ruby} -ropen-uri -e 'URI.open(\"https://google.com\") { |f| puts f.status.first }'").chomp
+                 shell_output("#{ruby} -ropen-uri -e 'URI.open(\"https://google.com\") { |f| puts f.status.first }'").chomp
     system ruby, "-rrbconfig", "-e", <<~EOS
       Gem.discover_gems_on_require = false
       require "portable_ruby_gems"
@@ -222,7 +224,7 @@ class RvRuby < Formula
     # install gem with native components
     system testpath/"bin/gem", "install", "byebug"
     assert_match "byebug",
-      shell_output("#{testpath}/bin/byebug --version")
+                 shell_output("#{testpath}/bin/byebug --version")
 
     super
   end

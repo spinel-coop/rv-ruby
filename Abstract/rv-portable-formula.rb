@@ -1,11 +1,32 @@
 # frozen_string_literal: true
 
-module PortableFormulaMixin
+module RvPortableFormulaMixin
   if OS.mac?
     if Hardware::CPU.arm?
-      TARGET_MACOS = :sonoma
+      TARGET_MACOS = :big_sur
+      TARGET_DARWIN_VERSION = Version.new("20.1.0").freeze
     else
-      TARGET_MACOS = :sequoia
+      TARGET_MACOS = :catalina
+      TARGET_DARWIN_VERSION = Version.new("19.0.0").freeze
+    end
+
+    CROSS_COMPILING = OS.kernel_version.major != TARGET_DARWIN_VERSION.major
+  end
+
+  def portable_configure_args
+    # Allow cross-compile between Darwin versions
+    if OS.mac? && CROSS_COMPILING
+      cpu = if Hardware::CPU.arm?
+        "aarch64"
+      else
+        "x86_64"
+      end
+      %W[
+        --build=#{cpu}-apple-darwin#{OS.kernel_version}
+        --host=#{cpu}-apple-darwin#{TARGET_DARWIN_VERSION}
+      ]
+    else
+      []
     end
   end
 
@@ -50,9 +71,9 @@ module PortableFormulaMixin
   end
 end
 
-class PortableFormula < Formula
+class RvPortableFormula < Formula
   desc "Abstract portable formula"
-  homepage "https://github.com/spinel-coop/rv-ruby"
+  homepage "https://github.com/Homebrew/homebrew-portable-ruby"
 
   def self.inherited(subclass)
     subclass.class_eval do
@@ -61,11 +82,16 @@ class PortableFormula < Formula
       keg_only "portable formulae are keg-only"
 
       on_linux do
-        depends_on "glibc@2.17" => :build
+        on_intel do
+          depends_on "glibc@2.13" => :build
+        end
+        on_arm do
+          depends_on "glibc@2.17" => :build
+        end
         depends_on "linux-headers@4.4" => :build
       end
 
-      prepend PortableFormulaMixin
+      prepend RvPortableFormulaMixin
     end
   end
 end

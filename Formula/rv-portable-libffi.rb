@@ -1,10 +1,10 @@
-require File.expand_path("../Abstract/portable-formula", __dir__)
+require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
-class PortableLibffiAT351 < PortableFormula
+class RvPortableLibffi < RvPortableFormula
   desc "Portable Foreign Function Interface library"
   homepage "https://sourceware.org/libffi/"
-  url "https://github.com/libffi/libffi/releases/download/v3.5.1/libffi-3.5.1.tar.gz"
-  sha256 "f99eb68a67c7d54866b7706af245e87ba060d419a062474b456d3bc8d4abdbd1"
+  url "https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz"
+  sha256 "f3a3082a23b37c293a4fcd1053147b371f2ff91fa7ea1b2a52e335676bac82dc"
   license "MIT"
 
   livecheck do
@@ -12,7 +12,8 @@ class PortableLibffiAT351 < PortableFormula
   end
 
   def install
-    system "./configure", *std_configure_args,
+    system "./configure", *portable_configure_args,
+                          *std_configure_args,
                           "--enable-static",
                           "--disable-shared",
                           "--disable-docs"

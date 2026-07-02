@@ -1,7 +1,7 @@
-require File.expand_path("../Abstract/portable-formula", __dir__)
+require File.expand_path("../Abstract/rv-portable-formula", __dir__)
 
 class RvRubyAT049 < Formula
-  prepend PortableFormulaMixin
+  prepend RvPortableFormulaMixin
   keg_only "portable formulae are keg-only"
   desc "A working upgrade of the oldest extant ruby version"
   homepage "https://github.com/sampersand/ruby-0.49"
