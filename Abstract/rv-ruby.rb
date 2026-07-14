@@ -64,8 +64,8 @@ class RvRuby < Formula
       end
 
       resource "bootsnap" do
-        url "https://rubygems.org/downloads/bootsnap-1.18.6.gem"
-        sha256 "0ae2393c1e911e38be0f24e9173e7be570c3650128251bf06240046f84a07d00"
+        url "https://rubygems.org/downloads/bootsnap-1.24.6.gem"
+        sha256 "c60bab88c70332290f0a2636a288f675299eb4f804a02a3c085b42eca9da164a"
 
         livecheck do
           url "https://rubygems.org/api/v1/versions/bootsnap.json"
