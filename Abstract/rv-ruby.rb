@@ -52,8 +52,8 @@ class RvRuby < Formula
       end
 
       resource "msgpack" do
-        url "https://rubygems.org/downloads/msgpack-1.8.0.gem"
-        sha256 "e64ce0212000d016809f5048b48eb3a65ffb169db22238fb4b72472fecb2d732"
+        url "https://rubygems.org/downloads/msgpack-1.8.3.gem"
+        sha256 "8bda4a6428d3244e50d6bd55854d354edbada88a4e1f4f5731a39a0f86bee6a1"
 
         livecheck do
           url "https://rubygems.org/api/v1/versions/msgpack.json"
