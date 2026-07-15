@@ -26,7 +26,7 @@ jobs:
       formulas: ${{ steps.setup.outputs.formulas }}
       date: ${{ steps.setup.outputs.date }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - run: date
@@ -87,7 +87,7 @@ jobs:
     env:
       TAG: ${{ needs.setup.outputs.date }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -181,7 +181,7 @@ jobs:
 
       - name: Generate release artifact provenance attestations
         if: ${{ inputs.formula == '' }}
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-checksums: rubies/SHA256SUMS
 
