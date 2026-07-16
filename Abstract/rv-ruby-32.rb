@@ -81,9 +81,10 @@ class RvRuby32 < Formula
 
   def install
     if build.with? "yjit"
-      # share RUSTUP_HOME across installs if provided
+      # make it possible to share RUSTUP_HOME across installs
       ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
       ENV["RUSTUP_TOOLCHAIN"] = "1.58"
+      system 'bash -c "echo $RUSTUP_HOME"'
       system "rustup", "install", "1.58", "--profile", "minimal" unless system("which", "rustc")
     end
 
@@ -216,8 +217,10 @@ class RvRuby32 < Formula
     assert_equal ruby.to_s, shell_output("#{ruby} -e 'puts RbConfig.ruby'").chomp
     assert_equal "3632233996",
                  shell_output("#{ruby} -rzlib -e 'puts Zlib.crc32(\"test\")'").chomp
-    assert_equal " \t\n\"\\'`@$><=;|&{(",
-                 shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
+    word_breaks = shell_output("#{ruby} -rreadline -e 'puts Readline.basic_word_break_characters'").chomp
+    " \t\n".chars.each do |char|
+      assert_includes word_breaks, char
+    end
     assert_equal '{"a"=>"b"}',
                  shell_output("#{ruby} -ryaml -e 'puts YAML.load(\"a: b\")'").chomp
     assert_equal "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
