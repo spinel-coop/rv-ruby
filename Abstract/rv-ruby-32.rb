@@ -81,9 +81,10 @@ class RvRuby32 < Formula
 
   def install
     if build.with? "yjit"
-      # share RUSTUP_HOME across installs if provided
+      # make it possible to share RUSTUP_HOME across installs
       ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
       ENV["RUSTUP_TOOLCHAIN"] = "1.58"
+      system 'bash -c "echo $RUSTUP_HOME"'
       system "rustup", "install", "1.58", "--profile", "minimal" unless system("which", "rustc")
     end
 
