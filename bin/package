@@ -2,7 +2,8 @@
 
 NUMBER="$1"
 
-export HOMEBREW_RUSTUP_HOME="$HOME/.rustup"
+# brew install sandbox blocks writes into $HOME/.rustup
+export HOMEBREW_RUSTUP_HOME="/tmp/rustup"
 
 if [[ "$NUMBER" == "3.2."* ]]; then
   export HOMEBREW_BASERUBY="$HOME/.rubies/ruby-${NUMBER}/bin/ruby"
