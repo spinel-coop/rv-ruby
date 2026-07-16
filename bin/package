@@ -2,6 +2,8 @@
 
 NUMBER="$1"
 
+export HOMEBREW_NO_ASK="true"
+
 # brew install sandbox blocks writes into $HOME/.rustup
 export HOMEBREW_RUSTUP_HOME="/tmp/rustup"
 
