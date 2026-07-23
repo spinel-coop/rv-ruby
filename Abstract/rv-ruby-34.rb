@@ -182,7 +182,7 @@ class RvRuby34 < Formula
         s.gsub!(ENV.cxx, "c++")
         s.gsub!(ENV.cc, "cc")
         # C++ compiler might have been disabled because we break it with glibc@* builds
-        s.sub!(/(CONFIG\["CXX"\] = )"false"/, '\\1"c++"') if build.without?("yjit") && build.without?("zjit")
+        s.sub!(/(CONFIG\["CXX"\] = )"false"/, '\\1"c++"') if build.without?("yjit")
       end
 
       # Ship libcrypt.a so that building native gems doesn't need system libcrypt installed.
