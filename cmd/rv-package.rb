@@ -4,10 +4,14 @@
 require "abstract_command"
 require "development_tools"
 require "dependency"
+require "system_command"
 
 module Homebrew
   module Cmd
     class RvPackageCmd < AbstractCommand
+      # Homebrew/brew#15069d12a0 removed Kernel#safe_system in favour of this mixin
+      include SystemCommand::Helpers if defined?(SystemCommand::Helpers)
+
       cmd_args do
         usage_banner <<~EOS
           `rv-package` <formulae>
@@ -51,7 +55,7 @@ module Homebrew
         flags << "--without-yjit" if args.without_yjit?
 
         # If test-bot cleanup is performed and auto-updates are disabled, this might not already be installed.
-        unless DevelopmentTools.ca_file_handles_most_https_certificates?
+        unless DevelopmentTools.curl_handles_most_https_certificates?
           safe_system HOMEBREW_BREW_FILE, "install", "ca-certificates"
         end
 
