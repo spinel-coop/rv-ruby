@@ -64,6 +64,7 @@ module RvPortableFormulaMixin
   end
 
   def test
+    %x{#{HOMEBREW_BREW_FILE} trust --formula #{full_name}}
     refute_match(/Homebrew libraries/,
                  shell_output("#{HOMEBREW_BREW_FILE} linkage #{full_name}"))
 
