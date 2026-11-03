@@ -65,8 +65,10 @@ module RvPortableFormulaMixin
 
   def test
     %x{#{HOMEBREW_BREW_FILE} trust --formula #{full_name}}
-    refute_match(/Homebrew libraries/,
-                 shell_output("#{HOMEBREW_BREW_FILE} linkage #{full_name}"))
+    linkage = shell_output("#{HOMEBREW_BREW_FILE} linkage #{full_name}")
+    homebrew_libraries = linkage[/^Homebrew libraries:\n((?:  .*\n)*)/, 1].to_s.lines.map(&:strip)
+    # Libraries shipped inside our own keg (e.g. the ASan runtime) keep it self-contained.
+    assert_empty homebrew_libraries.reject { |library| library.start_with?("#{rack}/") }
 
     super
   end
