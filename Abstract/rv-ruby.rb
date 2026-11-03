@@ -212,6 +212,11 @@ class RvRuby < Formula
   def test
     cp_r Dir["#{prefix}/*"], testpath
     ENV["PATH"] = "/usr/bin:/bin"
+    # Some extconf.rb files prefer ENV["CC"] over RbConfig, but sanitizer CFLAGS are clang-specific.
+    if build.with? "sanitizers"
+      ENV.delete "CC"
+      ENV.delete "CXX"
+    end
     ruby = (testpath/"bin/ruby").realpath
     unless /head/i.match?(version.to_s)
       assert_equal version.to_s.split("-").first, shell_output("#{ruby} -e 'puts RUBY_VERSION'").chomp

@@ -66,10 +66,15 @@ module RvRubySanitizers
                          .select { |rpath| rpath.start_with?("#{HOMEBREW_PREFIX}/") }
       next if linked.empty? && build_rpaths.empty?
 
-      Utils::Path.ensure_writable(file) do
+      # Not `Utils::Path.ensure_writable`: it's missing from the older Homebrew on GitHub's macOS images.
+      saved_mode = file.stat.mode
+      file.chmod(saved_mode | 0200)
+      begin
         linked.each { |old| file.change_install_name(old, "@executable_path/../lib/#{ASAN_RUNTIME}") }
         build_rpaths.each { |rpath| file.delete_rpath(rpath) }
         MachO.codesign!(file.to_s)
+      ensure
+        file.chmod(saved_mode)
       end
     end
   end
