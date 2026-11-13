@@ -5,9 +5,12 @@ module RvPortableFormulaMixin
     if Hardware::CPU.arm?
       TARGET_MACOS = :big_sur
       TARGET_DARWIN_VERSION = Version.new("20.1.0").freeze
+      # Published as `arm64_sonoma`, which is what rv downloads on Apple Silicon.
+      DEPLOYMENT_TARGET = "14.0"
     else
       TARGET_MACOS = :catalina
       TARGET_DARWIN_VERSION = Version.new("19.0.0").freeze
+      DEPLOYMENT_TARGET = nil
     end
 
     CROSS_COMPILING = OS.kernel_version.major != TARGET_DARWIN_VERSION.major
@@ -45,6 +48,8 @@ module RvPortableFormulaMixin
 
       # Always prefer to linking to portable libs.
       ENV.append "LDFLAGS", "-Wl,-search_paths_first"
+
+      ENV["MACOSX_DEPLOYMENT_TARGET"] = DEPLOYMENT_TARGET if DEPLOYMENT_TARGET
     elsif OS.linux?
       # reset Linuxbrew env, because we want to build formula against
       # libraries offered by system (CentOS docker) rather than Linuxbrew.
@@ -69,6 +74,17 @@ module RvPortableFormulaMixin
     homebrew_libraries = linkage[/^Homebrew libraries:\n((?:  .*\n)*)/, 1].to_s.lines.map(&:strip)
     # Libraries shipped inside our own keg (e.g. the ASan runtime) keep it self-contained.
     assert_empty homebrew_libraries.reject { |library| library.start_with?("#{rack}/") }
+
+    if OS.mac? && DEPLOYMENT_TARGET
+      target = Version.new(DEPLOYMENT_TARGET)
+      prefix.glob("**/*").each do |file|
+        next if file.symlink? || !file.file?
+        next if !file.mach_o_executable? && !file.dylib? && !file.mach_o_bundle?
+
+        minos = shell_output("xcrun vtool -show-build #{file}")[/^\s*(?:minos|version) (\d\S*)/, 1]
+        assert minos && Version.new(minos) <= target, "#{file} requires macOS #{minos}, expected <= #{target}"
+      end
+    end
 
     super
   end
