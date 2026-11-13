@@ -133,6 +133,7 @@ module Homebrew
           json.gsub! "#{name}--", "ruby-"
           json.gsub!(/-HEAD-[a-f0-9]+/, "-dev")
           json.gsub!(".sequoia.", ".ventura.")
+          json.gsub!(".arm64_sequoia.", ".arm64_sonoma.")
           json.gsub!(".bottle.", variant_tag)
           json.gsub! ERB::Util.url_encode(name), "ruby"
           hash = JSON.parse(json)
@@ -153,6 +154,7 @@ module Homebrew
           r = f.gsub("#{name}--", "ruby-")
           r = r.gsub(/-HEAD-[a-f0-9]+/, "-dev")
           r = r.gsub(".sequoia.", ".ventura.")
+          r = r.gsub(".arm64_sequoia.", ".arm64_sonoma.")
           r = r.gsub(".bottle.", variant_tag)
           FileUtils.mv f, r
         end
