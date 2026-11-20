@@ -234,7 +234,7 @@ class RvRuby34 < Formula
     assert_equal "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                  shell_output("#{ruby} -ropenssl -e 'puts OpenSSL::Digest::SHA256.hexdigest(\"\")'").chomp
     assert_match "200",
-                 shell_output("#{ruby} -ropen-uri -e 'URI.open(\"https://google.com\") { |f| puts f.status.first }'").chomp
+                 shell_output("#{ruby} -ropen-uri -e 'URI.open(\"https://example.com\") { |f| puts f.status.first }'").chomp
     system ruby, "-rrbconfig", "-e", <<~EOS
       Gem.discover_gems_on_require = false
       require "portable_ruby_gems"
