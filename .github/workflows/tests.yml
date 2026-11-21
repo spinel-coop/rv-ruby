@@ -36,6 +36,7 @@ jobs:
       - run: test/index-test
       - run: test/publish-test
       - run: test/mirror-test
+      - run: test/gc-test
 
   list_edited_formulas:
     runs-on: ubuntu-latest

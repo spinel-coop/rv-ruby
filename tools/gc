@@ -1,0 +1,88 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "date"
+require "json"
+require "open3"
+require "optparse"
+
+load File.expand_path("index", __dir__)
+
+# Finds the builds in the rv.dev/ruby bucket that have been replaced by newer ones.
+#
+#   tools/gc --bucket=rv-ruby            print the keys that can be deleted
+#   tools/gc --bucket=rv-ruby --delete   delete them
+#
+# A build can go 90 days after a newer one for its ruby and platform replaced it.
+# The index, the alias maps and the checksum files are never touched.
+module Collector
+  DAYS = 90
+  # Everything else in the bucket is {version}/{build}/{file}, or jruby/{version}/{build}/{file}.
+  KEPT = %r{\A(v1|alias|runs)/}
+  BUILD = %r{\A(?<ruby>(?:jruby/)?[^/]+)/(?<build>\d{8}[^/]*)/(?<filename>[^/]+)\z}
+
+  module_function
+
+  def run(argv, out: $stdout)
+    options = {}
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: gc --bucket=NAME [--delete]"
+      opts.on("--bucket=NAME", "bucket to collect")
+      opts.on("--delete", "delete what is found, rather than only printing it")
+    end
+    parser.parse(argv, into: options)
+    abort parser.help if options[:bucket].nil?
+
+    bucket = options[:bucket]
+    index = JSON.parse(aws("s3", "cp", "s3://#{bucket}/v1/index.json", "-"), symbolize_names: true)
+    listed = index[:rubies].map { |ruby| ruby[:url].delete_prefix("#{Index::BASE_URL}/") }
+
+    deletable(Index.list(bucket), listed, Date.today).each do |key|
+      aws("s3", "rm", "s3://#{bucket}/#{key}", "--only-show-errors") if options[:delete]
+      out.puts key
+    end
+  end
+
+  def aws(*args)
+    output, status = Open3.capture2("aws", *args)
+    abort "aws #{args.join(" ")} failed" unless status.success?
+
+    output
+  end
+
+  # `listed` is the keys the published index points to, which are kept whatever else is true.
+  def deletable(objects, listed, today)
+    keys = objects.to_set { |object| object[:key] }
+    builds = objects.reject { |object| object[:key].end_with?(".sha256") || object[:key].match?(KEPT) }
+                    .select { |object| object[:key].match?(BUILD) }
+    finished, unfinished = builds.partition { |object| keys.include?("#{object[:key]}.sha256") }
+
+    # An upload that died before its sidecar was written was never listed, so its own date counts.
+    replaced = replaced(finished).merge(unfinished.to_h { |object| [object[:key], date(object[:key])] })
+    stale = replaced.select { |key, day| day < today - DAYS && listed.none?(key) }.keys
+    stale.flat_map { |key| [key, "#{key}.sha256"] }.select { |key| keys.include?(key) }.sort
+  end
+
+  # The day each build was replaced by a newer one, for every build that has been.
+  #
+  # Builds are compared the way tools/index lists them, for a ruby and a platform. A build
+  # that the index leaves out, like a sanitizer build, is compared with others of the same name.
+  def replaced(builds)
+    groups = builds.group_by do |object|
+      match = BUILD.match(object[:key])
+      Index.identify(object[:key])&.values_at(:engine, :version, :platforms) || match.values_at(:ruby, :filename)
+    end
+    groups.values.flat_map do |group|
+      ordered = group.sort_by do |object|
+        Index.build_order(build: BUILD.match(object[:key])[:build], modified: object[:modified])
+      end
+      ordered.each_cons(2).map { |older, newer| [older[:key], date(newer[:key])] }
+    end.to_h
+  end
+
+  def date(key)
+    Date.strptime(BUILD.match(key)[:build][0, 8], "%Y%m%d")
+  end
+end
+
+Collector.run(ARGV) if $PROGRAM_NAME == __FILE__
