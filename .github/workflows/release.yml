@@ -132,10 +132,17 @@ jobs:
     if: ${{ !failure() && !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.formulas != '[]' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
       attestations: write
+    env:
+      BUCKET: rv-ruby
+      AWS_REGION: ${{ vars.RV_RUBY_REGION }}
+      AWS_ENDPOINT_URL: https://${{ vars.RV_RUBY_REGION }}.object.fastlystorage.app
+      # Fastly Object Storage doesn't take the checksums newer versions of the AWS CLI send by default
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -168,35 +175,29 @@ jobs:
           path: rubies
           merge-multiple: true
 
-      - name: Pick a tag
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        with:
+          ruby-version: "3.4"
+
+      - name: Pick a build id
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
           DATE: ${{ needs.setup.outputs.date }}
-          FORMULA_FILTER: ${{ inputs.formula }}
         run: |
-          tag="${DATE}"
-          # a second release on the same day is tagged with -2, a third with -3, and so on
-          if [[ -z "$FORMULA_FILTER" ]]; then
-            n=2
-            while gh release view "$tag" > /dev/null 2>&1; do
-              tag="${DATE}-${n}"
-              n=$((n + 1))
-            done
-          fi
-          echo "TAG=$tag" >> "$GITHUB_ENV"
+          build=$(tools/publish build --bucket="$BUCKET" --date="$DATE" rubies)
+          echo "BUILD=$build" >> "$GITHUB_ENV"
 
       # GitHub Packages tags each image with this version, and won't replace one that exists
-      - name: Set bottle versions to the tag
-        if: ${{ inputs.formula == '' }}
+      - name: Set bottle versions to the build id
         working-directory: rubies
         run: |
           for json in ruby-*.json; do
-            jq --arg tag "$TAG" 'map_values(.formula.pkg_version = $tag)' "$json" > "$json.tmp"
+            jq --arg build "$BUILD" 'map_values(.formula.pkg_version = $build)' "$json" > "$json.tmp"
             mv "$json.tmp" "$json"
           done
 
       - name: Generate SHA256 checksums
-        if: ${{ inputs.formula == '' }}
         working-directory: rubies
         run: |
           shopt -s nullglob
@@ -207,68 +208,79 @@ jobs:
           fi
           shasum -a 256 -- "${files[@]}" > SHA256SUMS
 
-      # Created before anything is uploaded, so a failed release still claims its tag
-      - name: Push tag
-        if: ${{ inputs.formula == '' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${TAG}" --notes "rv ruby ${TAG}" --target "$(git rev-parse --verify HEAD)" --title "${TAG}" --prerelease
-
       - name: Upload to GitHub Packages
-        if: ${{ inputs.formula == '' || inputs.formula == 'rv-ruby-dev' }}
         working-directory: rubies
         env:
           HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
           HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
         run: brew rv-upload --debug --root-url="https://ghcr.io/v2/${GITHUB_REPOSITORY,,}"
 
-      - name: Upload Homebrew bottles to GitHub Releases
-        if: ${{ inputs.formula == '' || inputs.formula == 'rv-ruby-dev' }}
-        working-directory: rubies
+      - name: Upload rubies to the bucket
         env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
-        run: brew rv-upload --debug --root-url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
-
-      - name: Upload Alpine tarballs to GitHub Releases
-        if: ${{ inputs.formula == '' || inputs.formula == 'rv-ruby-dev' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
         run: |
-          for f in rubies/*musl*.tar.gz; do
-            [ -f "$f" ] || continue
-            echo "Uploading Alpine artifact: $f"
-            gh release upload "${TAG}" "$f" --clobber
+          tools/publish upload --bucket="$BUCKET" --build="$BUILD" rubies
+          aws s3 cp rubies/SHA256SUMS "s3://$BUCKET/runs/$GITHUB_RUN_ID/SHA256SUMS" --only-show-errors --content-type text/plain
+
+      - name: Generate the index
+        id: index
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
+        run: |
+          surrogate_keys=$(tools/index --bucket="$BUCKET" --out=index)
+          echo "surrogate_keys=$surrogate_keys" >> "$GITHUB_OUTPUT"
+          pipx run check-jsonschema==0.39.0 --schemafile tools/schema/index.json index/v1/index.json
+          pipx run check-jsonschema==0.39.0 --schemafile tools/schema/alias.json index/alias/*/*.json
+
+      # The rubies are already up, so a failure before this step leaves the old index in place
+      - name: Upload the index
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
+        run: |
+          # keep the index we are replacing, so it can be put back by hand. There is none the first time.
+          aws s3 cp "s3://$BUCKET/v1/index.json" index/v1/index.json.prev --only-show-errors || true
+          aws s3 cp index "s3://$BUCKET" --recursive --only-show-errors --exclude v1/SHA256SUMS --content-type application/json
+          aws s3 cp index/v1/SHA256SUMS "s3://$BUCKET/v1/SHA256SUMS" --only-show-errors --content-type text/plain
+
+      - name: Purge the index and the alias maps that changed
+        env:
+          FASTLY_API_TOKEN: ${{ secrets.FASTLY_API_TOKEN }}
+          FASTLY_SERVICE_ID: ${{ vars.FASTLY_SERVICE_ID }}
+          SURROGATE_KEYS: ${{ steps.index.outputs.surrogate_keys }}
+        run: |
+          # Fastly takes up to 256 keys in a request
+          echo "$SURROGATE_KEYS" | jq --raw-output 'range(0; length; 256) as $i | .[$i:$i + 256] | join(" ")' | while read -r keys; do
+            curl --fail --silent --show-error --request POST \
+              --header "Fastly-Key: $FASTLY_API_TOKEN" --header "Surrogate-Key: $keys" \
+              "https://api.fastly.com/service/$FASTLY_SERVICE_ID/purge"
           done
 
-      - name: Upload checksums to GitHub Release
-        if: ${{ inputs.formula == '' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: gh release upload "${TAG}" rubies/SHA256SUMS --clobber
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RV_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RV_BOT_PRIVATE_KEY }}
+          permission-contents: write
 
-      - name: Verify checksums
-        if: ${{ inputs.formula == '' }}
+      # Versions of rv from before rv.dev/ruby install from the latest GitHub release.
+      # This one release holds every ruby, and is only ever added to.
+      - name: Add rubies to the rubies release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        working-directory: rubies
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          gh release download "${TAG}" --pattern SHA256SUMS --dir /tmp/verify --clobber
-          diff SHA256SUMS /tmp/verify/SHA256SUMS
-          shasum -a 256 -c /tmp/verify/SHA256SUMS
+          shopt -s nullglob
+          files=(rubies/ruby-[0-9]*.tar.gz)
+          if (( ${#files[@]} > 0 )); then
+            gh release upload rubies "${files[@]}" index/v1/SHA256SUMS --clobber
+          fi
 
       - name: Generate release artifact provenance attestations
-        if: ${{ inputs.formula == '' }}
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: rubies/SHA256SUMS
-
-      - name: Release
-        if: ${{ inputs.formula == '' || inputs.formula == 'rv-ruby-dev' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          gh release edit "${TAG}" --verify-tag --prerelease=false --latest
 
       - name: Cleanup
         run: rm -rvf rubies
