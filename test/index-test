@@ -149,6 +149,95 @@ class IndexTest < Minitest::Test
     SUMS
   end
 
+  def test_lists_rubyinstaller_archives_for_windows
+    upload("3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z")
+    upload("3.4.11/20261018/rubyinstaller-3.4.11-1-arm.7z")
+
+    assert_equal [["ruby", "3.4.11", ["windows-x86_64"]], ["ruby", "3.4.11", ["windows-aarch64"]]],
+                 entries.map { |entry| entry.values_at(:engine, :version, :platforms) }
+  end
+
+  def test_a_later_rubyinstaller_revision_replaces_the_earlier_one
+    upload("3.4.8/20260110/rubyinstaller-3.4.8-1-x64.7z")
+    upload("3.4.8/20260203/rubyinstaller-3.4.8-2-x64.7z")
+
+    assert_equal ["rubyinstaller-3.4.8-2-x64.7z"], entries.map { |entry| entry[:filename] }
+  end
+
+  def test_a_mirrored_archive_counts_same_day_builds_with_a_dot
+    upload("3.4.8/20260110/rubyinstaller-3.4.8-1-x64.7z")
+    upload("3.4.8/20260110.2/rubyinstaller-3.4.8-1-x64.7z")
+
+    assert_equal ["20260110.2"], entries.map { |entry| entry[:build] }
+  end
+
+  def test_rubyinstaller_head_is_dev_for_windows
+    upload("dev/20261120/ruby-dev.macos-x86_64.tar.gz")
+    upload("dev/20261121/rubyinstaller-head-x64.7z")
+    upload("dev/20261121/rubyinstaller-3.4.11-1-x64.7z")
+    upload("3.4.11/20261121/rubyinstaller-head-x64.7z")
+
+    assert_equal [["dev", ["macos-x86_64"], "ruby-dev.macos-x86_64.tar.gz"],
+                  ["dev", ["windows-x86_64"], "rubyinstaller-head-x64.7z"]],
+                 entries.map { |entry| entry.values_at(:version, :platforms, :filename) }
+  end
+
+  def test_lists_a_jruby_archive_once_for_every_platform_it_runs_on
+    upload("jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz")
+    upload("jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.zip")
+    upload("jruby/10.1.2.0/20261015/jruby-src-10.1.2.0.tar.gz")
+    upload("10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz")
+
+    assert_equal [["jruby", "10.1.2.0", Index::UNIX], ["jruby", "10.1.2.0", Index::WINDOWS.values]],
+                 entries.map { |entry| entry.values_at(:engine, :version, :platforms) }
+    assert_equal "https://rv.dev/ruby/jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz", entries.first[:url]
+  end
+
+  def test_sorts_ruby_before_jruby
+    upload("jruby/9.4.15.0/20261015/jruby-bin-9.4.15.0.tar.gz")
+    upload("4.0.7/20261014/ruby-4.0.7.macos-x86_64.tar.gz")
+
+    assert_equal ["ruby", "jruby"], entries.map { |entry| entry[:engine] }
+  end
+
+  def test_a_jruby_alias_map_has_every_platform
+    upload("jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz")
+    upload("jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.zip")
+    map = JSON.parse(files["alias/jruby/10.1.2.0.json"])
+
+    assert_equal Index::PLATFORMS, map["platforms"].keys
+    assert_equal "jruby-bin-10.1.2.0.tar.gz", map["platforms"]["linux-musl-aarch64"]["filename"]
+    assert_equal "jruby-bin-10.1.2.0.zip", map["platforms"]["windows-aarch64"]["filename"]
+  end
+
+  def test_says_where_a_mirrored_archive_came_from
+    upload("4.0.7/20261014/ruby-4.0.7.macos-x86_64.tar.gz")
+    upload("3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z")
+    upstream = { url: "https://example.com/rubyinstaller-3.4.11-1-x64.7z", sha256: "f" * 64, released_at: "2026-10-18" }
+
+    asked = []
+    listed = Index.with_upstream(entries, []) do |entry|
+      asked << entry[:filename]
+      upstream
+    end
+    rubies = Index.index(listed, NOW)[:rubies]
+
+    assert_equal ["rubyinstaller-3.4.11-1-x64.7z"], asked
+    assert_equal upstream, rubies.first[:upstream]
+    refute rubies.last.key?(:upstream)
+    refute rubies.first.key?(:mirrored)
+  end
+
+  def test_reuses_what_the_previous_index_said_about_a_mirrored_archive
+    upload("3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z")
+    upstream = { url: "https://example.com/rubyinstaller-3.4.11-1-x64.7z", sha256: "f" * 64, released_at: "2026-10-18" }
+    previous = [{ url: "https://rv.dev/ruby/3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z", upstream: upstream }]
+
+    listed = Index.with_upstream(entries, previous) { flunk "should not ask the bucket again" }
+
+    assert_equal upstream, listed.first[:upstream]
+  end
+
   def test_surrogate_key
     assert_equal "alias:ruby:4.1.0-preview1", Index.surrogate_key("alias/ruby/4.1.0-preview1.json")
   end

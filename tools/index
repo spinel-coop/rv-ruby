@@ -12,17 +12,34 @@ require "tmpdir"
 #
 #   tools/index --bucket=rv-ruby --out=DIR
 #
-# Writes v1/index.json, v1/SHA256SUMS and an alias/ruby/{version}.json for each
+# Writes v1/index.json, v1/SHA256SUMS and an alias/{engine}/{version}.json for each
 # version into DIR, laid out like the bucket, then prints the surrogate keys to
 # purge once DIR is uploaded. The bucket is only read, never written.
 module Index
   BASE_URL = "https://rv.dev/ruby"
-  PLATFORMS = %w[
+  ENGINES = %w[ruby jruby].freeze
+  UNIX = %w[
     macos-aarch64 macos-x86_64 linux-x86_64 linux-aarch64 linux-musl-x86_64 linux-musl-aarch64
   ].freeze
-  ARTIFACT = %r{
+  # What RubyInstaller2 calls each Windows platform in a filename, and the name rv knows it by.
+  WINDOWS = { "x64" => "windows-x86_64", "arm" => "windows-aarch64" }.freeze
+  PLATFORMS = (UNIX + WINDOWS.values).freeze
+
+  # Our own builds, one for each platform, which tools/publish names for it.
+  RUBY = %r{
     \A(?<version>[^/]+)/(?<build>[^/]+)/
-    (?<filename>ruby-\k<version>\.(?<platform>#{PLATFORMS.join("|")})\.tar\.gz)\z
+    (?<filename>ruby-\k<version>\.(?<platform>#{UNIX.join("|")})\.tar\.gz)\z
+  }x
+  # RubyInstaller2's builds for Windows, which tools/mirror copies. Their build of Ruby's
+  # master branch is called head, and is our dev.
+  RUBYINSTALLER = %r{
+    \A(?<version>[^/]+)/(?<build>[^/]+)/
+    (?<filename>rubyinstaller-(?<release>\k<version>-\d+|head)-(?<platform>#{WINDOWS.keys.join("|")})\.7z)\z
+  }x
+  # JRuby's own archives, also mirrored. The tarball runs anywhere but Windows, which gets the zip.
+  JRUBY = %r{
+    \Ajruby/(?<version>[^/]+)/(?<build>[^/]+)/
+    (?<filename>jruby-bin-\k<version>\.(?<extension>tar\.gz|zip))\z
   }x
 
   module_function
@@ -40,10 +57,15 @@ module Index
     Dir.mktmpdir do |current|
       objects = list(options[:bucket])
       aws("s3", "sync", "s3://#{options[:bucket]}", current, "--only-show-errors",
-          "--exclude", "*", "--include", "*.sha256", "--include", "alias/*")
+          "--exclude", "*", "--include", "*.sha256", "--include", "alias/*", "--include", "v1/index.json")
       sidecars = Dir.glob("**/*.sha256", base: current).to_h { |key| [key, File.read(File.join(current, key))] }
+      published = File.join(current, "v1/index.json")
+      previous = File.exist?(published) ? JSON.parse(File.read(published), symbolize_names: true)[:rubies] : []
 
-      files = files(newest(artifacts(objects, sidecars)), Time.now.utc)
+      entries = with_upstream(newest(artifacts(objects, sidecars)), previous) do |entry|
+        upstream(options[:bucket], entry[:url].delete_prefix("#{BASE_URL}/"))
+      end
+      files = files(entries, Time.now.utc)
       files.each do |key, content|
         path = File.join(options[:out], key)
         FileUtils.mkdir_p(File.dirname(path))
@@ -75,33 +97,71 @@ module Index
   # Sanitizer builds are in the bucket too, but their names don't match and they stay unlisted.
   def artifacts(objects, sidecars)
     objects.filter_map do |object|
-      match = ARTIFACT.match(object[:key])
+      archive = identify(object[:key])
       sidecar = sidecars["#{object[:key]}.sha256"]
-      next if match.nil? || sidecar.nil?
+      next if archive.nil? || sidecar.nil?
 
-      {
-        engine:    "ruby",
-        version:   match[:version],
-        build:     match[:build],
-        platforms: [match[:platform]],
-        filename:  match[:filename],
-        url:       "#{BASE_URL}/#{object[:key]}",
-        size:      object[:size],
-        sha256:    sidecar.split.first,
-        modified:  object[:modified],
-      }
+      archive.merge(
+        url:      "#{BASE_URL}/#{object[:key]}",
+        size:     object[:size],
+        sha256:   sidecar.split.first,
+        modified: object[:modified],
+      )
     end
+  end
+
+  def identify(key)
+    if (match = RUBY.match(key))
+      archive(match, "ruby", [match[:platform]])
+    elsif (match = RUBYINSTALLER.match(key)) && (match[:version] == "dev") == (match[:release] == "head")
+      archive(match, "ruby", [WINDOWS.fetch(match[:platform])], mirrored: true)
+    elsif (match = JRUBY.match(key))
+      archive(match, "jruby", (match[:extension] == "zip") ? WINDOWS.values : UNIX, mirrored: true)
+    end
+  end
+
+  def archive(match, engine, platforms, mirrored: false)
+    {
+      engine:    engine,
+      version:   match[:version],
+      build:     match[:build],
+      platforms: platforms,
+      filename:  match[:filename],
+      mirrored:  mirrored,
+    }
   end
 
   def newest(artifacts)
     newest = artifacts.group_by { |artifact| artifact.values_at(:engine, :version, :platforms) }
                       .map { |_, builds| builds.max_by { |artifact| build_order(artifact) } }
     newest.sort_by do |artifact|
-      [version_order(artifact[:version]), PLATFORMS.index(artifact[:platforms].first)]
+      engine, version, platforms = artifact.values_at(:engine, :version, :platforms)
+      [ENGINES.index(engine), version_order(version), PLATFORMS.index(platforms.first)]
     end
   end
 
+  # Where a mirrored archive came from is kept in its metadata, and asked for with the block.
+  # It never changes, so what the previous index said about an archive is used again.
+  def with_upstream(entries, previous)
+    known = previous.to_h { |ruby| [ruby[:url], ruby[:upstream]] }
+
+    entries.map do |entry|
+      entry[:mirrored] ? entry.merge(upstream: known[entry[:url]] || yield(entry)) : entry
+    end
+  end
+
+  def upstream(bucket, key)
+    metadata = JSON.parse(aws("s3api", "head-object", "--bucket", bucket, "--key", key, "--output", "json",
+                              "--query", "Metadata"))
+    {
+      url:         metadata.fetch("upstream-url"),
+      sha256:      metadata.fetch("upstream-sha256"),
+      released_at: metadata.fetch("upstream-released-at"),
+    }
+  end
+
   # Builds are dated, and a later build on the same day carries a suffix, like 20261014-2.
+  # A mirrored archive counts up with a dot instead, like 20261018.2.
   def build_order(artifact)
     date, suffix = artifact[:build].split(/[-.]/, 2)
     [date, suffix.to_i, artifact[:modified]]
@@ -127,7 +187,7 @@ module Index
     {
       schema:       1,
       generated_at: now.iso8601,
-      rubies:       entries.map { |entry| entry.except(:modified) },
+      rubies:       entries.map { |entry| entry.except(:modified, :mirrored) },
     }
   end
 
