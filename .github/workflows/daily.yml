@@ -8,11 +8,11 @@ on:
 jobs:
   daily:
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
       attestations: write
-    if: ${{ github.repository == 'spinel-coop/rv-ruby-dev' }}
+    if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
     uses: $/.github/workflows/release.yml
     with:
       formula: rv-ruby-dev

@@ -1,0 +1,7 @@
+#!/bin/bash
+# Prints the rv-ruby@ formulae edited in a commit range, as a JSON array.
+# CI builds these on pull requests, and the release publishes them after a merge.
+set -euo pipefail
+
+git diff --name-only --diff-filter=d "$1" -- 'Formula/rv-ruby@*' |
+  jq --raw-input | jq --slurp --compact-output 'map(.[8:-3])'

@@ -1,0 +1,150 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "time"
+require "tmpdir"
+
+# Generates the rv.dev/ruby index from the objects in the bucket.
+#
+#   tools/index --bucket=rv-ruby --out=DIR
+#
+# Writes v1/index.json, v1/SHA256SUMS and an alias/ruby/{version}.json for each
+# version into DIR, laid out like the bucket, then prints the surrogate keys to
+# purge once DIR is uploaded. The bucket is only read, never written.
+module Index
+  BASE_URL = "https://rv.dev/ruby"
+  PLATFORMS = %w[
+    macos-aarch64 macos-x86_64 linux-x86_64 linux-aarch64 linux-musl-x86_64 linux-musl-aarch64
+  ].freeze
+  ARTIFACT = %r{
+    \A(?<version>[^/]+)/(?<build>[^/]+)/
+    (?<filename>ruby-\k<version>\.(?<platform>#{PLATFORMS.join("|")})\.tar\.gz)\z
+  }x
+
+  module_function
+
+  def run(argv, out: $stdout)
+    options = {}
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: index --bucket=NAME --out=DIR"
+      opts.on("--bucket=NAME", "bucket to read")
+      opts.on("--out=DIR", "directory to write the index into")
+    end
+    parser.parse(argv, into: options)
+    abort parser.help if options[:bucket].nil? || options[:out].nil?
+
+    Dir.mktmpdir do |current|
+      objects = list(options[:bucket])
+      aws("s3", "sync", "s3://#{options[:bucket]}", current, "--only-show-errors",
+          "--exclude", "*", "--include", "*.sha256", "--include", "alias/*")
+      sidecars = Dir.glob("**/*.sha256", base: current).to_h { |key| [key, File.read(File.join(current, key))] }
+
+      files = files(newest(artifacts(objects, sidecars)), Time.now.utc)
+      files.each do |key, content|
+        path = File.join(options[:out], key)
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, content)
+      end
+
+      changed = files.keys.select do |key|
+        published = File.join(current, key)
+        key.start_with?("alias/") && !(File.exist?(published) && File.read(published) == files[key])
+      end
+      out.puts JSON.generate(["index", *changed.map { |key| surrogate_key(key) }])
+    end
+  end
+
+  def aws(*args)
+    output, status = Open3.capture2("aws", *args)
+    abort "aws #{args.join(" ")} failed" unless status.success?
+
+    output
+  end
+
+  def list(bucket)
+    query = "Contents[].{key: Key, size: Size, modified: LastModified}"
+    listing = aws("s3api", "list-objects-v2", "--bucket", bucket, "--output", "json", "--query", query)
+    JSON.parse(listing, symbolize_names: true) || []
+  end
+
+  # An object is an artifact once its .sha256 sidecar exists, which is uploaded after it.
+  # Sanitizer builds are in the bucket too, but their names don't match and they stay unlisted.
+  def artifacts(objects, sidecars)
+    objects.filter_map do |object|
+      match = ARTIFACT.match(object[:key])
+      sidecar = sidecars["#{object[:key]}.sha256"]
+      next if match.nil? || sidecar.nil?
+
+      {
+        engine:    "ruby",
+        version:   match[:version],
+        build:     match[:build],
+        platforms: [match[:platform]],
+        filename:  match[:filename],
+        url:       "#{BASE_URL}/#{object[:key]}",
+        size:      object[:size],
+        sha256:    sidecar.split.first,
+        modified:  object[:modified],
+      }
+    end
+  end
+
+  def newest(artifacts)
+    newest = artifacts.group_by { |artifact| artifact.values_at(:engine, :version, :platforms) }
+                      .map { |_, builds| builds.max_by { |artifact| build_order(artifact) } }
+    newest.sort_by do |artifact|
+      [version_order(artifact[:version]), PLATFORMS.index(artifact[:platforms].first)]
+    end
+  end
+
+  # Builds are dated, and a later build on the same day carries a suffix, like 20261014-2.
+  def build_order(artifact)
+    date, suffix = artifact[:build].split(/[-.]/, 2)
+    [date, suffix.to_i, artifact[:modified]]
+  end
+
+  # "dev" isn't a version, and sorts after everything that is.
+  def version_order(version)
+    Gem::Version.correct?(version) ? [0, Gem::Version.new(version)] : [1, version]
+  end
+
+  def files(entries, now)
+    files = {
+      "v1/index.json" => "#{JSON.generate(index(entries, now))}\n",
+      "v1/SHA256SUMS" => sums(entries),
+    }
+    entries.group_by { |entry| entry.values_at(:engine, :version) }.each do |(engine, version), versions|
+      files["alias/#{engine}/#{version}.json"] = "#{JSON.generate(alias_map(engine, version, versions))}\n"
+    end
+    files
+  end
+
+  def index(entries, now)
+    {
+      schema:       1,
+      generated_at: now.iso8601,
+      rubies:       entries.map { |entry| entry.except(:modified) },
+    }
+  end
+
+  def alias_map(engine, version, entries)
+    platforms = entries.flat_map do |entry|
+      entry[:platforms].map { |platform| [platform, entry.slice(:build, :filename, :url, :size, :sha256)] }
+    end
+    { engine: engine, version: version, platforms: platforms.to_h }
+  end
+
+  def sums(entries)
+    entries.sort_by { |entry| entry[:filename] }.map { |entry| "#{entry[:sha256]}  #{entry[:filename]}\n" }.join
+  end
+
+  def surrogate_key(alias_key)
+    alias_key.delete_suffix(".json").tr("/", ":")
+  end
+end
+
+Index.run(ARGV) if $PROGRAM_NAME == __FILE__

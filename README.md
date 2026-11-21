@@ -17,7 +17,7 @@ First, [install `rv`](https://github.com/spinel-coop/rv), and then run `rv ruby 
 Ruby 3.4 and later can also be built with AddressSanitizer and UndefinedBehaviorSanitizer, for finding memory errors in Ruby and in native extensions. These builds are much slower and are never installed by default.
 
 - Run e.g. `bin/package 4.0.9 --with-sanitizers` to build one locally. It needs Homebrew's `llvm`, and produces `ruby-4.0.9.<platform>.asan_ubsan.tar.gz`.
-- Dispatch the release workflow with `sanitizers` checked to add them to a release, for macOS and glibc Linux. ASan doesn't support musl, so there are no Alpine sanitizer builds.
+- Dispatch the release workflow with `sanitizers` checked to publish them, for macOS and glibc Linux. They sit beside the regular build in the bucket and aren't listed in the index. ASan doesn't support musl, so there are no Alpine sanitizer builds.
 - On macOS, the ASan runtime is shipped in `lib/` next to Ruby.
 - Native gems are compiled with the sanitizer flags, which needs clang 18 or later. On Linux any `clang` on `PATH` works. On macOS it must be Homebrew's (`brew install llvm`), because Apple clang's ASan instrumentation is incompatible with the LLVM runtime.
 
@@ -30,11 +30,17 @@ To write the formula yourself, run `bin/rv-bump write`. Run `test/rv-bump-test` 
 ## How do I issue a new release
 
 [The release workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml) runs whenever a formula or abstract changes on `main`.
-It rebuilds every Ruby, then tags and uploads them as a release named for the date. A second release on the same day gets a tag ending in `-2`.
+It builds the rubies that were edited, or all of them when an abstract or a portable library changed, and uploads them to the bucket behind `https://rv.dev/ruby`. Each upload is kept under a build id, the date it was built, so a rebuild never replaces an earlier one. A second build on the same day gets an id ending in `-2`.
 
-A release that fails partway leaves its tag behind as a prerelease, and the next run takes the next number. Delete the leftover with `gh release delete <tag> --cleanup-tag`.
+A tarball is built with a Homebrew bottle tag in its name, like `ruby-3.4.13.arm64_sonoma.tar.gz`. In the bucket it is named for the platform it runs on instead, like `ruby-3.4.13.macos-aarch64.tar.gz`, which is also what the index calls the platform.
 
-You can also dispatch the workflow yourself.
+It then regenerates the index that `rv` reads with `tools/index`, and adds the same files to the [`rubies` release](https://github.com/spinel-coop/rv-ruby/releases/tag/rubies) for versions of `rv` that still install from GitHub. Those versions ask for a tarball by the name it was built with, so that release keeps those names.
+
+You can also dispatch the workflow yourself. Set `formula` to build only the rubies whose name contains it.
+
+The [daily workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/daily.yml) publishes `ruby-dev` from Ruby's master branch the same way. It also adds the tarballs to the latest release of [rv-ruby-dev](https://github.com/spinel-coop/rv-ruby-dev), which is where older versions of `rv` look for it.
+
+The workflow reads the `RV_RUBY_ACCESS_KEY_ID`, `RV_RUBY_SECRET_ACCESS_KEY`, `FASTLY_API_TOKEN`, `RV_BOT_CLIENT_ID` and `RV_BOT_PRIVATE_KEY` secrets, and the `RV_RUBY_REGION` and `FASTLY_SERVICE_ID` variables.
 
 <details>
 <summary>Manual steps are documented below.</summary>

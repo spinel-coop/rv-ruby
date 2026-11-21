@@ -33,6 +33,8 @@ jobs:
           ruby-version: "3.4"
       - run: test/rv-bump-test
       - run: bin/rv-bump write --dry-run --index=test/fixture/index.txt
+      - run: test/index-test
+      - run: test/publish-test
 
   list_edited_formulas:
     runs-on: ubuntu-latest
@@ -51,7 +53,7 @@ jobs:
           list='[]'
           # pushes to main have no base, and nothing to build
           if [[ -n "$BASE" ]]; then
-            list=$(git diff --name-only --diff-filter=d "$BASE...$HEAD" -- 'Formula/rv-ruby@*' | jq --raw-input | jq --slurp --compact-output 'map(.[8:-3])')
+            list=$(bin/edited-formulas "$BASE...$HEAD")
           fi
           echo "edited formulas: $list"
           echo "formulas=$list" >> "$GITHUB_OUTPUT"
