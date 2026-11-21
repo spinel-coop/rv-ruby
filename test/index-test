@@ -1,0 +1,194 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "minitest/autorun"
+require "fileutils"
+require "json"
+require "stringio"
+require "time"
+require "tmpdir"
+
+load File.expand_path("../tools/index", __dir__)
+
+class IndexTest < Minitest::Test
+  NOW = Time.utc(2026, 10, 22, 9, 30).freeze
+
+  def setup
+    @objects = []
+    @sidecars = {}
+  end
+
+  # Adds an object and its sidecar, the way the publisher uploads them.
+  def upload(key, sha256: "a" * 64, size: 100, modified: "2026-10-14T00:00:00+00:00", sidecar: true)
+    @objects << { key: key, size: size, modified: modified }
+    return unless sidecar
+
+    @objects << { key: "#{key}.sha256", size: 90, modified: modified }
+    @sidecars["#{key}.sha256"] = "#{sha256}  #{File.basename(key)}\n"
+  end
+
+  def entries
+    Index.newest(Index.artifacts(@objects, @sidecars))
+  end
+
+  def files
+    Index.files(entries, NOW)
+  end
+
+  def test_describes_an_artifact
+    upload("3.4.11/20261014/ruby-3.4.11.arm64_sonoma.tar.gz", sha256: "b" * 64, size: 36_656_127)
+
+    assert_equal [{
+      engine:    "ruby",
+      version:   "3.4.11",
+      build:     "20261014",
+      platforms: ["arm64_sonoma"],
+      filename:  "ruby-3.4.11.arm64_sonoma.tar.gz",
+      url:       "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.arm64_sonoma.tar.gz",
+      size:      36_656_127,
+      sha256:    "b" * 64,
+    }], Index.index(entries, NOW)[:rubies]
+  end
+
+  def test_lists_only_the_newest_build
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20261101/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20260930/ruby-3.4.11.ventura.tar.gz")
+
+    assert_equal ["20261101"], entries.map { |entry| entry[:build] }
+  end
+
+  def test_a_suffixed_build_is_newer_than_the_plain_one_from_that_day
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20261014-2/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20261014-10/ruby-3.4.11.ventura.tar.gz")
+
+    assert_equal ["20261014-10"], entries.map { |entry| entry[:build] }
+  end
+
+  def test_builds_with_unordered_suffixes_fall_back_to_upload_time
+    upload("3.4.11/20261014-abc123/ruby-3.4.11.ventura.tar.gz", modified: "2026-10-14T09:00:00+00:00")
+    upload("3.4.11/20261014-9fe021/ruby-3.4.11.ventura.tar.gz", modified: "2026-10-14T17:00:00+00:00")
+
+    assert_equal ["20261014-9fe021"], entries.map { |entry| entry[:build] }
+  end
+
+  def test_platforms_are_tracked_separately
+    upload("3.4.11/20261014/ruby-3.4.11.x86_64_linux.tar.gz")
+    upload("3.4.11/20261101/ruby-3.4.11.arm64_linux.tar.gz")
+
+    assert_equal [["x86_64_linux", "20261014"], ["arm64_linux", "20261101"]],
+                 entries.map { |entry| [entry[:platforms].first, entry[:build]] }
+  end
+
+  def test_skips_an_artifact_whose_sidecar_has_not_arrived
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz", sidecar: false)
+
+    assert_empty entries
+  end
+
+  def test_skips_everything_that_is_not_a_ruby_tarball
+    upload("3.4.11/20261014/ruby-3.4.11.arm64_sonoma.asan_ubsan.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.12.arm64_sonoma.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.solaris.tar.gz")
+    upload("3.4.11/20261014/SHA256SUMS", sidecar: false)
+    upload("v1/index.json", sidecar: false)
+    upload("alias/ruby/3.4.11.json", sidecar: false)
+
+    assert_empty entries
+  end
+
+  def test_sorts_by_version_with_prereleases_first_and_dev_last
+    %w[dev 4.1.0 3.4.9 4.1.0-preview1 3.4.11].each do |version|
+      upload("#{version}/20261014/ruby-#{version}.ventura.tar.gz")
+    end
+
+    assert_equal ["3.4.9", "3.4.11", "4.1.0-preview1", "4.1.0", "dev"], entries.map { |entry| entry[:version] }
+  end
+
+  def test_index_document
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
+    index = JSON.parse(files["v1/index.json"])
+
+    assert_equal 1, index["schema"]
+    assert_equal "2026-10-22T09:30:00Z", index["generated_at"]
+    assert_equal %w[engine version build platforms filename url size sha256],
+                 index["rubies"].first.keys
+  end
+
+  def test_writes_an_alias_map_for_each_version
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz", sha256: "c" * 64, size: 5)
+    upload("3.4.11/20261101/ruby-3.4.11.arm64_linux.tar.gz")
+    upload("4.1.0-preview1/20261014/ruby-4.1.0-preview1.ventura.tar.gz")
+
+    assert_equal ["alias/ruby/3.4.11.json", "alias/ruby/4.1.0-preview1.json"], files.keys.grep(/\Aalias/)
+
+    map = JSON.parse(files["alias/ruby/3.4.11.json"])
+
+    assert_equal "ruby", map["engine"]
+    assert_equal "3.4.11", map["version"]
+    assert_equal ["ventura", "arm64_linux"], map["platforms"].keys
+    assert_equal({
+      "build"    => "20261014",
+      "filename" => "ruby-3.4.11.ventura.tar.gz",
+      "url"      => "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.ventura.tar.gz",
+      "size"     => 5,
+      "sha256"   => "c" * 64,
+    }, map["platforms"]["ventura"])
+  end
+
+  def test_checksum_file_lists_the_indexed_artifacts
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz", sha256: "c" * 64)
+    upload("3.4.11/20261101/ruby-3.4.11.ventura.tar.gz", sha256: "d" * 64)
+    upload("3.4.11/20261014/ruby-3.4.11.arm64_linux.tar.gz", sha256: "e" * 64)
+
+    assert_equal <<~SUMS, files["v1/SHA256SUMS"]
+      #{"e" * 64}  ruby-3.4.11.arm64_linux.tar.gz
+      #{"d" * 64}  ruby-3.4.11.ventura.tar.gz
+    SUMS
+  end
+
+  def test_surrogate_key
+    assert_equal "alias:ruby:4.1.0-preview1", Index.surrogate_key("alias/ruby/4.1.0-preview1.json")
+  end
+
+  # Runs against a stand-in for the aws CLI that serves a bucket from a directory.
+  def test_run_writes_the_index_and_prints_what_to_purge
+    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
+    upload("4.0.7/20261014/ruby-4.0.7.ventura.tar.gz")
+
+    Dir.mktmpdir do |dir|
+      bucket = File.join(dir, "bucket")
+      @sidecars.merge("alias/ruby/4.0.7.json" => files["alias/ruby/4.0.7.json"]).each do |key, content|
+        FileUtils.mkdir_p(File.dirname(File.join(bucket, key)))
+        File.write(File.join(bucket, key), content)
+      end
+      File.write(File.join(dir, "listing.json"), JSON.generate(@objects))
+      File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
+        #!/bin/sh
+        case "$1 $2" in
+          "s3api list-objects-v2") cat "#{dir}/listing.json" ;;
+          "s3 sync") cp -R "#{bucket}/." "$4" ;;
+          *) exit 1 ;;
+        esac
+      SH
+
+      out = StringIO.new
+      with_path(dir) { Index.run(["--bucket=rv-ruby", "--out=#{dir}/out"], out: out) }
+
+      assert_equal ["index", "alias:ruby:3.4.11"], JSON.parse(out.string)
+      assert_equal ["alias/ruby/3.4.11.json", "alias/ruby/4.0.7.json", "v1/SHA256SUMS", "v1/index.json"],
+                   Dir.glob("**/*", base: "#{dir}/out").select { |path| File.file?("#{dir}/out/#{path}") }.sort
+    end
+  end
+
+  private
+
+  def with_path(dir)
+    path = ENV.fetch("PATH")
+    ENV["PATH"] = "#{dir}:#{path}"
+    yield
+  ensure
+    ENV["PATH"] = path
+  end
+end

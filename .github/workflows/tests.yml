@@ -33,6 +33,7 @@ jobs:
           ruby-version: "3.4"
       - run: test/rv-bump-test
       - run: bin/rv-bump write --dry-run --index=test/fixture/index.txt
+      - run: test/index-test
 
   list_edited_formulas:
     runs-on: ubuntu-latest

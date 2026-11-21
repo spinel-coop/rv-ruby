@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "rv.dev/ruby alias map",
+  "type": "object",
+  "required": ["engine", "version", "platforms"],
+  "additionalProperties": false,
+  "properties": {
+    "engine": { "enum": ["ruby", "jruby"] },
+    "version": { "type": "string", "minLength": 1 },
+    "platforms": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "enum": [
+          "arm64_sonoma", "ventura", "x86_64_linux", "arm64_linux",
+          "x86_64_linux_musl", "arm64_linux_musl", "x64", "arm"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["build", "filename", "url", "size", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "build": { "type": "string", "pattern": "^[0-9]{8}([-.][0-9a-z]+)?$" },
+          "filename": { "type": "string", "minLength": 1 },
+          "url": { "type": "string", "pattern": "^https://rv\\.dev/ruby/" },
+          "size": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

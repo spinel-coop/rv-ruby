@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "rv.dev/ruby index",
+  "type": "object",
+  "required": ["schema", "generated_at", "rubies"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "rubies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ruby" }
+    }
+  },
+  "$defs": {
+    "ruby": {
+      "type": "object",
+      "required": ["engine", "version", "build", "platforms", "filename", "url", "size", "sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "engine": { "enum": ["ruby", "jruby"] },
+        "version": { "type": "string", "minLength": 1 },
+        "build": { "type": "string", "pattern": "^[0-9]{8}([-.][0-9a-z]+)?$" },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/platform" }
+        },
+        "filename": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "pattern": "^https://rv\\.dev/ruby/" },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "upstream": {
+          "type": "object",
+          "required": ["url", "sha256", "released_at"],
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "released_at": { "type": "string", "format": "date" }
+          }
+        }
+      }
+    },
+    "platform": {
+      "enum": [
+        "arm64_sonoma", "ventura", "x86_64_linux", "arm64_linux",
+        "x86_64_linux_musl", "arm64_linux_musl", "x64", "arm"
+      ]
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
