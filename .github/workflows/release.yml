@@ -1,6 +1,12 @@
 name: Release
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Formula/**"
+      - "Abstract/**"
   workflow_call:
     inputs:
       formula:
@@ -28,8 +34,14 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   setup:
+    # rv-ruby-dev mirrors this repo, and only ever releases rv-ruby-dev
+    if: ${{ github.event_name != 'push' || github.repository == 'spinel-coop/rv-ruby' }}
     runs-on: ubuntu-latest
     outputs:
       formulas: ${{ steps.setup.outputs.formulas }}
@@ -110,7 +122,7 @@ jobs:
   release:
     needs: [setup, build-homebrew, build-alpine, build-sanitizers]
     # build-sanitizers is skipped unless requested
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ !failure() && !cancelled() && needs.setup.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
