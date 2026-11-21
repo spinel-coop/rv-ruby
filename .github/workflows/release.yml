@@ -277,6 +277,17 @@ jobs:
             gh release upload rubies "${files[@]}" index/v1/SHA256SUMS --clobber
           fi
 
+      # A newer release would become the latest one, and those versions of rv would stop seeing most rubies
+      - name: Check that rubies is the newest release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          newest=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          if [[ "$newest" != "rubies" ]]; then
+            echo "::error::$newest was created after the rubies release. Delete it, or rv installs from GitHub will break."
+            exit 1
+          fi
+
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: dev-app-token
         if: ${{ hashFiles('rubies/ruby-dev.*.tar.gz') != '' }}
