@@ -1,0 +1,74 @@
+name: Mirror rubies
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      BUCKET: rv-ruby
+      AWS_REGION: ${{ vars.RV_RUBY_REGION }}
+      AWS_ENDPOINT_URL: https://${{ vars.RV_RUBY_REGION }}.object.fastlystorage.app
+      # Fastly Object Storage doesn't take the checksums newer versions of the AWS CLI send by default
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    steps:
+      # A release regenerates the index too, and two of them at once could publish the older one last.
+      # Joining its concurrency group isn't an option: a waiting mirror run would cancel a waiting release.
+      - name: Leave it for an hour if a release is running
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          running=$(gh run list --repo "$GITHUB_REPOSITORY" --limit 50 --json workflowName,status \
+            --jq '[.[] | select(.status != "completed" and (.workflowName == "Release" or .workflowName == "Daily ruby-dev"))] | length')
+          echo "running=$running" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ steps.release.outputs.running == '0' }}
+        with:
+          persist-credentials: false
+
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        if: ${{ steps.release.outputs.running == '0' }}
+        with:
+          ruby-version: "3.4"
+
+      - name: Mirror new archives
+        id: mirror
+        if: ${{ steps.release.outputs.running == '0' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          keys=$(tools/mirror --bucket="$BUCKET")
+          echo "$keys"
+          if [[ -n "$keys" ]]; then
+            echo "mirrored=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the index
+        if: ${{ steps.mirror.outputs.mirrored == 'true' }}
+        uses: $/.github/actions/publish-index
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
+        with:
+          bucket: ${{ env.BUCKET }}
+          fastly-api-token: ${{ secrets.FASTLY_API_TOKEN }}
+          fastly-service-id: ${{ vars.FASTLY_SERVICE_ID }}
