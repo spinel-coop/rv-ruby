@@ -42,7 +42,7 @@ class IndexTest < Minitest::Test
       engine:    "ruby",
       version:   "3.4.11",
       build:     "20261014",
-      platforms: ["arm64_sonoma"],
+      platforms: ["macos-aarch64"],
       filename:  "ruby-3.4.11.arm64_sonoma.tar.gz",
       url:       "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.arm64_sonoma.tar.gz",
       size:      36_656_127,
@@ -77,7 +77,7 @@ class IndexTest < Minitest::Test
     upload("3.4.11/20261014/ruby-3.4.11.x86_64_linux.tar.gz")
     upload("3.4.11/20261101/ruby-3.4.11.arm64_linux.tar.gz")
 
-    assert_equal [["x86_64_linux", "20261014"], ["arm64_linux", "20261101"]],
+    assert_equal [["linux-x86_64", "20261014"], ["linux-aarch64", "20261101"]],
                  entries.map { |entry| [entry[:platforms].first, entry[:build]] }
   end
 
@@ -127,14 +127,14 @@ class IndexTest < Minitest::Test
 
     assert_equal "ruby", map["engine"]
     assert_equal "3.4.11", map["version"]
-    assert_equal ["ventura", "arm64_linux"], map["platforms"].keys
+    assert_equal ["macos-x86_64", "linux-aarch64"], map["platforms"].keys
     assert_equal({
       "build"    => "20261014",
       "filename" => "ruby-3.4.11.ventura.tar.gz",
       "url"      => "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.ventura.tar.gz",
       "size"     => 5,
       "sha256"   => "c" * 64,
-    }, map["platforms"]["ventura"])
+    }, map["platforms"]["macos-x86_64"])
   end
 
   def test_checksum_file_lists_the_indexed_artifacts

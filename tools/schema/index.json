@@ -45,8 +45,9 @@
     },
     "platform": {
       "enum": [
-        "arm64_sonoma", "ventura", "x86_64_linux", "arm64_linux",
-        "x86_64_linux_musl", "arm64_linux_musl", "x64", "arm"
+        "macos-aarch64", "macos-x86_64", "linux-x86_64",
+        "linux-aarch64", "linux-musl-x86_64", "linux-musl-aarch64",
+        "windows-x86_64", "windows-aarch64"
       ]
     },
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
