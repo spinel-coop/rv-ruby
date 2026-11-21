@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -32,26 +33,68 @@ jobs:
           ruby-version: "3.4"
       - run: test/rv-bump-test
       - run: bin/rv-bump write --dry-run --index=test/fixture/index.txt
-   
-  # list_edited_formulas:
-  # build_edited_formulas:
 
-  # build:
-  #   needs: syntax
-  #   if: github.event_name != 'push'
-  #   uses: ./.github/workflows/build.yml
-  #   with:
-  #     formula: portable-ruby@3.4.5
+  list_edited_formulas:
+    runs-on: ubuntu-latest
+    outputs:
+      formulas: ${{ steps.list.outputs.formulas }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: list
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: |
+          list='[]'
+          # pushes to main have no base, and nothing to build
+          if [[ -n "$BASE" ]]; then
+            list=$(git diff --name-only --diff-filter=d "$BASE...$HEAD" -- 'Formula/rv-ruby@*' | jq --raw-input | jq --slurp --compact-output 'map(.[8:-3])')
+          fi
+          echo "edited formulas: $list"
+          echo "formulas=$list" >> "$GITHUB_OUTPUT"
+
+  build_edited_formulas:
+    needs: list_edited_formulas
+    if: ${{ needs.list_edited_formulas.outputs.formulas != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        formula: ${{ fromJSON(needs.list_edited_formulas.outputs.formulas) }}
+    uses: $/.github/workflows/build.yml
+    with:
+      formula: ${{ matrix.formula }}
+
+  build_edited_formulas_alpine:
+    needs: list_edited_formulas
+    if: ${{ needs.list_edited_formulas.outputs.formulas != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        formula: ${{ fromJSON(needs.list_edited_formulas.outputs.formulas) }}
+    uses: $/.github/workflows/build-alpine.yml
+    with:
+      formula: ${{ matrix.formula }}
 
   # This job is used as a required status check, instead of requiring each build matrix element.
-  # When using ephemeral runners, the name of those runs change every time so they cannot be set as required.
-  # conclusion:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name != 'push' && !cancelled()
-  #   steps:
-  #     - name: Result
-  #       env:
-  #         RESULT: ${{ needs.build.result }}
-  #       run: |
-  #         [[ "${RESULT}" == success ]]
+  # The names of those change with the formula being built, so they cannot be set as required.
+  build-edited-formulas:
+    needs: [list_edited_formulas, build_edited_formulas, build_edited_formulas_alpine]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Result
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          [[ ! "$RESULTS" =~ failure|cancelled ]]
