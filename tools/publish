@@ -1,0 +1,81 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "digest"
+require "open3"
+require "optparse"
+require "tempfile"
+
+# Uploads freshly built rubies to the rv.dev/ruby bucket.
+#
+#   tools/publish build --bucket=rv-ruby --date=20261014 DIR     print the build id for the tarballs in DIR
+#   tools/publish upload --bucket=rv-ruby --build=20261014 DIR   upload them under that build id
+#
+# A tarball goes to {version}/{build}/{filename}, followed by a .sha256 sidecar.
+# The build id is the date, with -2, -3 and so on when that date is taken, so
+# nothing in the bucket is ever overwritten.
+module Publish
+  # Platform names never start with a digit, which is where the version ends.
+  VERSION = /\Aruby-(?<version>dev|\d[^.]*(?:\.\d[^.]*)*)\./
+
+  module_function
+
+  def run(argv, out: $stdout)
+    options = {}
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: publish build|upload [options] DIR"
+      opts.on("--bucket=NAME", "bucket to publish to")
+      opts.on("--date=YYYYMMDD", "with build, the date the build id starts from")
+      opts.on("--build=ID", "with upload, the build id to upload under")
+    end
+    command, dir = parser.parse(argv, into: options)
+    tarballs = Dir.glob("*.tar.gz", base: dir.to_s).sort
+    abort parser.help if options[:bucket].nil? || tarballs.empty?
+
+    case command
+    when "build"
+      out.puts build_id(options.fetch(:date), tarballs, keys(options[:bucket]))
+    when "upload"
+      tarballs.each do |filename|
+        upload(options[:bucket], File.join(dir, filename), key(filename, options.fetch(:build)))
+        out.puts key(filename, options[:build])
+      end
+    else
+      abort parser.help
+    end
+  end
+
+  def aws(*args)
+    output, status = Open3.capture2("aws", *args)
+    abort "aws #{args.join(" ")} failed" unless status.success?
+
+    output
+  end
+
+  def keys(bucket)
+    aws("s3api", "list-objects-v2", "--bucket", bucket, "--output", "text", "--query", "Contents[].[Key]").split("\n")
+  end
+
+  def key(filename, build)
+    "#{filename[VERSION, :version]}/#{build}/#{filename}"
+  end
+
+  def build_id(date, filenames, keys)
+    builds = (1..).lazy.map { |n| (n == 1) ? date : "#{date}-#{n}" }
+    builds.find { |build| filenames.none? { |filename| keys.include?(key(filename, build)) } }
+  end
+
+  # The sidecar goes up last: tools/index only lists a tarball that has one.
+  def upload(bucket, path, key)
+    aws("s3", "cp", path, "s3://#{bucket}/#{key}", "--only-show-errors")
+
+    Tempfile.create("sha256") do |sidecar|
+      sidecar.write("#{Digest::SHA256.file(path).hexdigest}  #{File.basename(path)}\n")
+      sidecar.close
+      aws("s3", "cp", sidecar.path, "s3://#{bucket}/#{key}.sha256", "--only-show-errors",
+          "--content-type", "text/plain")
+    end
+  end
+end
+
+Publish.run(ARGV) if $PROGRAM_NAME == __FILE__

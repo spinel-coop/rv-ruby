@@ -1,0 +1,91 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "minitest/autorun"
+require "digest"
+require "stringio"
+require "tmpdir"
+
+load File.expand_path("../tools/publish", __dir__)
+
+class PublishTest < Minitest::Test
+  def test_keys
+    assert_equal "3.4.13/20261014/ruby-3.4.13.arm64_sonoma.tar.gz",
+                 Publish.key("ruby-3.4.13.arm64_sonoma.tar.gz", "20261014")
+    assert_equal "4.1.0-preview1/20261014-2/ruby-4.1.0-preview1.x86_64_linux_musl.tar.gz",
+                 Publish.key("ruby-4.1.0-preview1.x86_64_linux_musl.tar.gz", "20261014-2")
+    assert_equal "dev/20261014/ruby-dev.ventura.tar.gz", Publish.key("ruby-dev.ventura.tar.gz", "20261014")
+  end
+
+  def test_sanitizer_builds_sit_beside_the_ruby_they_were_built_from
+    assert_equal "4.0.9/20261014/ruby-4.0.9.arm64_sonoma.asan_ubsan.tar.gz",
+                 Publish.key("ruby-4.0.9.arm64_sonoma.asan_ubsan.tar.gz", "20261014")
+  end
+
+  def test_build_id_is_the_date
+    assert_equal "20261014", Publish.build_id("20261014", ["ruby-3.4.13.ventura.tar.gz"], [])
+  end
+
+  def test_build_id_counts_up_when_the_date_is_taken
+    keys = ["3.4.13/20261014/ruby-3.4.13.ventura.tar.gz", "3.4.13/20261014-2/ruby-3.4.13.ventura.tar.gz"]
+
+    assert_equal "20261014-3", Publish.build_id("20261014", ["ruby-3.4.13.ventura.tar.gz"], keys)
+  end
+
+  def test_one_taken_tarball_moves_the_whole_run
+    filenames = ["ruby-3.4.13.ventura.tar.gz", "ruby-4.0.10.ventura.tar.gz"]
+
+    assert_equal "20261014-2", Publish.build_id("20261014", filenames, ["4.0.10/20261014/ruby-4.0.10.ventura.tar.gz"])
+  end
+
+  def test_build_id_ignores_other_rubies_and_platforms
+    keys = ["3.4.13/20261014/ruby-3.4.13.arm64_linux.tar.gz", "3.4.12/20261014/ruby-3.4.12.ventura.tar.gz"]
+
+    assert_equal "20261014", Publish.build_id("20261014", ["ruby-3.4.13.ventura.tar.gz"], keys)
+  end
+
+  # Runs against a stand-in for the aws CLI that keeps a bucket in a directory.
+  def test_build_then_upload
+    Dir.mktmpdir do |dir|
+      rubies = File.join(dir, "rubies")
+      FileUtils.mkdir_p([rubies, File.join(dir, "bucket/3.4.13/20261014")])
+      File.write(File.join(rubies, "ruby-3.4.13.ventura.tar.gz"), "a ruby")
+      File.write(File.join(rubies, "ruby-3.4.13.ventura.json"), "{}")
+      File.write(File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.ventura.tar.gz"), "an older ruby")
+      File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
+        #!/bin/sh
+        cd "#{dir}/bucket"
+        case "$1 $2" in
+          "s3api list-objects-v2") find . -type f | sed "s|^./||" ;;
+          "s3 cp") mkdir -p "$(dirname "${4#s3://rv-ruby/}")" && cp "$3" "${4#s3://rv-ruby/}" ;;
+          *) exit 1 ;;
+        esac
+      SH
+
+      build = publish(dir, "build", "--date=20261014", rubies).chomp
+
+      assert_equal "20261014-2", build
+      assert_equal "3.4.13/20261014-2/ruby-3.4.13.ventura.tar.gz\n",
+                   publish(dir, "upload", "--build=#{build}", rubies)
+
+      uploaded = File.join(dir, "bucket/3.4.13/20261014-2/ruby-3.4.13.ventura.tar.gz")
+
+      assert_equal "a ruby", File.read(uploaded)
+      assert_equal "#{Digest::SHA256.hexdigest("a ruby")}  ruby-3.4.13.ventura.tar.gz\n",
+                   File.read("#{uploaded}.sha256")
+      assert_equal "an older ruby", File.read(File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.ventura.tar.gz"))
+    end
+  end
+
+  private
+
+  def publish(dir, *args)
+    out = StringIO.new
+    path = ENV.fetch("PATH")
+    ENV["PATH"] = "#{dir}:#{path}"
+    Publish.run([*args, "--bucket=rv-ruby"], out: out)
+    out.string
+  ensure
+    ENV["PATH"] = path
+  end
+end
