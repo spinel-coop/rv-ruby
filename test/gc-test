@@ -1,0 +1,174 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "minitest/autorun"
+require "json"
+require "stringio"
+require "tmpdir"
+
+load File.expand_path("../tools/gc", __dir__)
+
+class CollectorTest < Minitest::Test
+  TODAY = Date.new(2026, 11, 20).freeze
+
+  def setup
+    @objects = []
+  end
+
+  def upload(key, sidecar: true, modified: "2026-01-01T00:00:00+00:00")
+    @objects << { key: key, size: 100, modified: modified }
+    @objects << { key: "#{key}.sha256", size: 90, modified: modified } if sidecar
+  end
+
+  def deletable(listed: [])
+    Collector.deletable(@objects, listed, TODAY)
+  end
+
+  def test_deletes_a_build_that_was_replaced_long_ago
+    upload("3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260601/ruby-3.4.11.macos-x86_64.tar.gz")
+
+    old = "3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz"
+
+    assert_equal [old, "#{old}.sha256"], deletable
+  end
+
+  def test_keeps_the_newest_build_however_old_it_is
+    upload("3.2.1/20240101/ruby-3.2.1.macos-x86_64.tar.gz")
+
+    assert_empty deletable
+  end
+
+  def test_keeps_a_build_for_90_days_after_it_was_replaced
+    upload("3.4.11/20240101/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260822/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20240101/ruby-3.4.11.linux-aarch64.tar.gz")
+    upload("3.4.11/20260821/ruby-3.4.11.linux-aarch64.tar.gz")
+
+    assert_equal ["3.4.11/20240101/ruby-3.4.11.linux-aarch64.tar.gz"], deletable.grep_v(/sha256/)
+  end
+
+  # Every ruby is rebuilt at once when a library they share is updated.
+  def test_a_build_replaced_yesterday_can_still_be_rolled_back_to
+    upload("3.2.1/20240101/ruby-3.2.1.macos-x86_64.tar.gz")
+    upload("3.2.1/20261119/ruby-3.2.1.macos-x86_64.tar.gz")
+
+    assert_empty deletable
+  end
+
+  def test_each_build_counts_from_the_one_that_replaced_it
+    upload("3.4.11/20260101/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260201/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20261101/ruby-3.4.11.macos-x86_64.tar.gz")
+
+    assert_equal ["3.4.11/20260101/ruby-3.4.11.macos-x86_64.tar.gz"], deletable.grep_v(/sha256/)
+  end
+
+  def test_platforms_are_collected_separately
+    upload("3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20261101/ruby-3.4.11.linux-aarch64.tar.gz")
+
+    assert_empty deletable
+  end
+
+  def test_same_day_builds_are_ordered_by_their_suffix
+    upload("3.4.11/20260301-2/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz")
+
+    assert_equal ["3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz"], deletable.grep_v(/sha256/)
+  end
+
+  def test_keeps_whatever_the_published_index_points_to
+    upload("3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260601/ruby-3.4.11.macos-x86_64.tar.gz")
+
+    assert_empty deletable(listed: ["3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz"])
+  end
+
+  def test_never_touches_the_index_the_alias_maps_or_the_checksum_files
+    upload("v1/index.json", sidecar: false)
+    upload("v1/index.json.prev", sidecar: false)
+    upload("v1/SHA256SUMS", sidecar: false)
+    upload("alias/ruby/3.4.11.json", sidecar: false)
+    upload("runs/20240101/SHA256SUMS", sidecar: false)
+    upload("runs/20240102/SHA256SUMS", sidecar: false)
+
+    assert_empty deletable
+  end
+
+  def test_an_earlier_rubyinstaller_revision_is_replaced_by_a_later_one
+    upload("3.4.8/20260110/rubyinstaller-3.4.8-1-x64.7z")
+    upload("3.4.8/20260203/rubyinstaller-3.4.8-2-x64.7z")
+
+    assert_equal ["3.4.8/20260110/rubyinstaller-3.4.8-1-x64.7z"], deletable.grep_v(/sha256/)
+  end
+
+  def test_collects_mirrored_archives_and_old_head_builds
+    upload("jruby/10.1.2.0/20260115/jruby-bin-10.1.2.0.tar.gz")
+    upload("jruby/10.1.2.0/20260115.2/jruby-bin-10.1.2.0.tar.gz")
+    upload("jruby/10.1.2.0/20260115/jruby-bin-10.1.2.0.zip")
+    upload("dev/20260301/rubyinstaller-head-x64.7z")
+    upload("dev/20260302/rubyinstaller-head-x64.7z")
+    upload("dev/20261120/rubyinstaller-head-x64.7z")
+
+    assert_equal ["dev/20260301/rubyinstaller-head-x64.7z", "jruby/10.1.2.0/20260115/jruby-bin-10.1.2.0.tar.gz"],
+                 deletable.grep_v(/sha256/)
+  end
+
+  # The index doesn't list sanitizer builds, so they are compared with each other.
+  def test_sanitizer_builds_are_collected_apart_from_the_regular_ones
+    upload("4.0.9/20260301/ruby-4.0.9.macos-x86_64.asan_ubsan.tar.gz")
+    upload("4.0.9/20260401/ruby-4.0.9.macos-x86_64.asan_ubsan.tar.gz")
+    upload("4.0.9/20260401/ruby-4.0.9.macos-x86_64.tar.gz")
+
+    assert_equal ["4.0.9/20260301/ruby-4.0.9.macos-x86_64.asan_ubsan.tar.gz"], deletable.grep_v(/sha256/)
+  end
+
+  # An upload that died before its sidecar was written is never listed, and never the newest.
+  def test_collects_an_old_upload_that_never_finished
+    upload("3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz", sidecar: false)
+    upload("3.4.11/20261119/ruby-3.4.11.linux-aarch64.tar.gz", sidecar: false)
+
+    assert_equal ["3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz"], deletable
+  end
+
+  # Runs against a stand-in for the aws CLI that keeps a bucket in a directory.
+  def test_prints_by_default_and_deletes_when_told_to
+    upload("3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260601/ruby-3.4.11.macos-x86_64.tar.gz")
+
+    Dir.mktmpdir do |dir|
+      index = { rubies: [{ url: "https://rv.dev/ruby/3.4.11/20260601/ruby-3.4.11.macos-x86_64.tar.gz" }] }
+      File.write(File.join(dir, "index.json"), JSON.generate(index))
+      File.write(File.join(dir, "listing.json"), JSON.generate(@objects))
+      File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
+        #!/bin/sh
+        case "$1 $2" in
+          "s3api list-objects-v2") cat "#{dir}/listing.json" ;;
+          "s3 cp") cat "#{dir}/index.json" ;;
+          "s3 rm") echo "$3" >> "#{dir}/deleted" ;;
+          *) exit 1 ;;
+        esac
+      SH
+      old = "3.4.11/20260301/ruby-3.4.11.macos-x86_64.tar.gz"
+
+      assert_equal "#{old}\n#{old}.sha256\n", gc(dir)
+      refute_path_exists File.join(dir, "deleted")
+
+      assert_equal "#{old}\n#{old}.sha256\n", gc(dir, "--delete")
+      assert_equal "s3://rv-ruby/#{old}\ns3://rv-ruby/#{old}.sha256\n", File.read(File.join(dir, "deleted"))
+    end
+  end
+
+  private
+
+  def gc(dir, *args)
+    out = StringIO.new
+    path = ENV.fetch("PATH")
+    ENV["PATH"] = "#{dir}:#{path}"
+    Collector.run(["--bucket=rv-ruby", *args], out: out)
+    out.string
+  ensure
+    ENV["PATH"] = path
+  end
+end

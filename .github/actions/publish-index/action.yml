@@ -1,0 +1,52 @@
+name: Publish the index
+description: Regenerates the rv.dev/ruby index from the bucket, uploads it, and purges what changed.
+
+# The step that uses this sets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in its env.
+inputs:
+  bucket:
+    description: The bucket to read, and to upload the index to
+    required: true
+  fastly-api-token:
+    description: A Fastly API token that can purge the rv.dev service
+    required: true
+  fastly-service-id:
+    description: The rv.dev service
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Generate the index
+      id: index
+      shell: bash
+      env:
+        BUCKET: ${{ inputs.bucket }}
+      run: |
+        surrogate_keys=$(tools/index --bucket="$BUCKET" --out=index)
+        echo "surrogate_keys=$surrogate_keys" >> "$GITHUB_OUTPUT"
+        pipx run check-jsonschema==0.39.0 --schemafile tools/schema/index.json index/v1/index.json
+        pipx run check-jsonschema==0.39.0 --schemafile tools/schema/alias.json index/alias/*/*.json
+
+    - name: Upload the index
+      shell: bash
+      env:
+        BUCKET: ${{ inputs.bucket }}
+      run: |
+        # keep the index we are replacing, so it can be put back by hand. There is none the first time.
+        aws s3 cp "s3://$BUCKET/v1/index.json" index/v1/index.json.prev --only-show-errors || true
+        aws s3 cp index "s3://$BUCKET" --recursive --only-show-errors --exclude v1/SHA256SUMS --content-type application/json
+        aws s3 cp index/v1/SHA256SUMS "s3://$BUCKET/v1/SHA256SUMS" --only-show-errors --content-type text/plain
+
+    - name: Purge the index and the alias maps that changed
+      shell: bash
+      env:
+        FASTLY_API_TOKEN: ${{ inputs.fastly-api-token }}
+        FASTLY_SERVICE_ID: ${{ inputs.fastly-service-id }}
+        SURROGATE_KEYS: ${{ steps.index.outputs.surrogate_keys }}
+      run: |
+        # Fastly takes up to 256 keys in a request
+        echo "$SURROGATE_KEYS" | jq --raw-output 'range(0; length; 256) as $i | .[$i:$i + 256] | join(" ")' | while read -r keys; do
+          curl --fail --silent --show-error --request POST \
+            --header "Fastly-Key: $FASTLY_API_TOKEN" --header "Surrogate-Key: $keys" \
+            "https://api.fastly.com/service/$FASTLY_SERVICE_ID/purge"
+        done

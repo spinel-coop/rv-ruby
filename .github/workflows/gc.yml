@@ -1,0 +1,52 @@
+name: Collect old builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: "Delete the builds that are found, rather than only listing them"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "20 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gc
+  cancel-in-progress: false
+
+jobs:
+  gc:
+    if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
+    runs-on: ubuntu-latest
+    env:
+      BUCKET: rv-ruby
+      AWS_REGION: ${{ vars.RV_RUBY_REGION }}
+      AWS_ENDPOINT_URL: https://${{ vars.RV_RUBY_REGION }}.object.fastlystorage.app
+      # Fastly Object Storage doesn't take the checksums newer versions of the AWS CLI send by default
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        with:
+          ruby-version: "3.4"
+
+      # The weekly run only lists what could go, for someone to read before deleting it by dispatch.
+      - name: Collect old builds
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
+          DELETE: ${{ inputs.delete }}
+        run: |
+          flags=()
+          if [[ "$DELETE" == "true" ]]; then
+            flags+=(--delete)
+          fi
+          tools/gc --bucket="$BUCKET" "${flags[@]}"
