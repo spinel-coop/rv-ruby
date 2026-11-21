@@ -50,19 +50,24 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - run: date
       - run: date +%Y%m%d
       - id: setup
         env:
           FORMULA_FILTER: ${{ inputs.formula }}
+          BEFORE: ${{ github.event.before }}
         run: |
           list=$(ls Formula/rv-ruby* | jq --raw-input | jq --slurp --compact-output 'map(. |= .[8:-3])')
           if [[ -n "$FORMULA_FILTER" ]]; then
             # if we passed a string, only build matches
             list=$(echo "$list" | jq --compact-output --arg f "$FORMULA_FILTER" 'map(select(. | contains($f)))')
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && -z "$(git diff --name-only "$BEFORE..$GITHUB_SHA" -- Abstract 'Formula/rv-portable-*')" ]]; then
+            # a push that only edits rubies builds just those
+            list=$(bin/edited-formulas "$BEFORE..$GITHUB_SHA")
           else
-            # without a filter, build all but rv-ruby-dev
+            # an abstract or a portable library changes every ruby, so build all but rv-ruby-dev
             list=${list/'"'rv-ruby-dev'"',/}
           fi
           echo 'setting $formulas to:'
@@ -77,6 +82,7 @@ jobs:
 
   build-homebrew:
     needs: setup
+    if: ${{ needs.setup.outputs.formulas != '[]' }}
     permissions:
       contents: read
       id-token: write
@@ -107,6 +113,7 @@ jobs:
 
   build-alpine:
     needs: setup
+    if: ${{ needs.setup.outputs.formulas != '[]' }}
     permissions:
       contents: read
       id-token: write
@@ -122,7 +129,7 @@ jobs:
   release:
     needs: [setup, build-homebrew, build-alpine, build-sanitizers]
     # build-sanitizers is skipped unless requested
-    if: ${{ !failure() && !cancelled() && needs.setup.result == 'success' }}
+    if: ${{ !failure() && !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.formulas != '[]' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
