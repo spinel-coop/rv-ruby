@@ -17,18 +17,12 @@ require "tmpdir"
 # purge once DIR is uploaded. The bucket is only read, never written.
 module Index
   BASE_URL = "https://rv.dev/ruby"
-  # The name each platform has in our filenames, and the name rv knows it by.
-  PLATFORMS = {
-    "arm64_sonoma"      => "macos-aarch64",
-    "ventura"           => "macos-x86_64",
-    "x86_64_linux"      => "linux-x86_64",
-    "arm64_linux"       => "linux-aarch64",
-    "x86_64_linux_musl" => "linux-musl-x86_64",
-    "arm64_linux_musl"  => "linux-musl-aarch64",
-  }.freeze
+  PLATFORMS = %w[
+    macos-aarch64 macos-x86_64 linux-x86_64 linux-aarch64 linux-musl-x86_64 linux-musl-aarch64
+  ].freeze
   ARTIFACT = %r{
     \A(?<version>[^/]+)/(?<build>[^/]+)/
-    (?<filename>ruby-\k<version>\.(?<platform>#{PLATFORMS.keys.join("|")})\.tar\.gz)\z
+    (?<filename>ruby-\k<version>\.(?<platform>#{PLATFORMS.join("|")})\.tar\.gz)\z
   }x
 
   module_function
@@ -89,7 +83,7 @@ module Index
         engine:    "ruby",
         version:   match[:version],
         build:     match[:build],
-        platforms: [PLATFORMS.fetch(match[:platform])],
+        platforms: [match[:platform]],
         filename:  match[:filename],
         url:       "#{BASE_URL}/#{object[:key]}",
         size:      object[:size],
@@ -103,7 +97,7 @@ module Index
     newest = artifacts.group_by { |artifact| artifact.values_at(:engine, :version, :platforms) }
                       .map { |_, builds| builds.max_by { |artifact| build_order(artifact) } }
     newest.sort_by do |artifact|
-      [version_order(artifact[:version]), PLATFORMS.values.index(artifact[:platforms].first)]
+      [version_order(artifact[:version]), PLATFORMS.index(artifact[:platforms].first)]
     end
   end
 

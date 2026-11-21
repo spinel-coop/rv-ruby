@@ -274,7 +274,9 @@ jobs:
           shopt -s nullglob
           files=(rubies/ruby-[0-9]*.tar.gz)
           if (( ${#files[@]} > 0 )); then
-            gh release upload rubies "${files[@]}" index/v1/SHA256SUMS --clobber
+            # this release keeps the names the tarballs were built with, which those versions of rv ask for
+            tools/publish release-sums index/v1/SHA256SUMS > SHA256SUMS
+            gh release upload rubies "${files[@]}" SHA256SUMS --clobber
           fi
 
       # A newer release would become the latest one, and those versions of rv would stop seeing most rubies

@@ -36,61 +36,62 @@ class IndexTest < Minitest::Test
   end
 
   def test_describes_an_artifact
-    upload("3.4.11/20261014/ruby-3.4.11.arm64_sonoma.tar.gz", sha256: "b" * 64, size: 36_656_127)
+    upload("3.4.11/20261014/ruby-3.4.11.macos-aarch64.tar.gz", sha256: "b" * 64, size: 36_656_127)
 
     assert_equal [{
       engine:    "ruby",
       version:   "3.4.11",
       build:     "20261014",
       platforms: ["macos-aarch64"],
-      filename:  "ruby-3.4.11.arm64_sonoma.tar.gz",
-      url:       "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.arm64_sonoma.tar.gz",
+      filename:  "ruby-3.4.11.macos-aarch64.tar.gz",
+      url:       "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.macos-aarch64.tar.gz",
       size:      36_656_127,
       sha256:    "b" * 64,
     }], Index.index(entries, NOW)[:rubies]
   end
 
   def test_lists_only_the_newest_build
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
-    upload("3.4.11/20261101/ruby-3.4.11.ventura.tar.gz")
-    upload("3.4.11/20260930/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20261101/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20260930/ruby-3.4.11.macos-x86_64.tar.gz")
 
     assert_equal ["20261101"], entries.map { |entry| entry[:build] }
   end
 
   def test_a_suffixed_build_is_newer_than_the_plain_one_from_that_day
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
-    upload("3.4.11/20261014-2/ruby-3.4.11.ventura.tar.gz")
-    upload("3.4.11/20261014-10/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20261014-2/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("3.4.11/20261014-10/ruby-3.4.11.macos-x86_64.tar.gz")
 
     assert_equal ["20261014-10"], entries.map { |entry| entry[:build] }
   end
 
   def test_builds_with_unordered_suffixes_fall_back_to_upload_time
-    upload("3.4.11/20261014-abc123/ruby-3.4.11.ventura.tar.gz", modified: "2026-10-14T09:00:00+00:00")
-    upload("3.4.11/20261014-9fe021/ruby-3.4.11.ventura.tar.gz", modified: "2026-10-14T17:00:00+00:00")
+    upload("3.4.11/20261014-abc123/ruby-3.4.11.macos-x86_64.tar.gz", modified: "2026-10-14T09:00:00+00:00")
+    upload("3.4.11/20261014-9fe021/ruby-3.4.11.macos-x86_64.tar.gz", modified: "2026-10-14T17:00:00+00:00")
 
     assert_equal ["20261014-9fe021"], entries.map { |entry| entry[:build] }
   end
 
   def test_platforms_are_tracked_separately
-    upload("3.4.11/20261014/ruby-3.4.11.x86_64_linux.tar.gz")
-    upload("3.4.11/20261101/ruby-3.4.11.arm64_linux.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.linux-x86_64.tar.gz")
+    upload("3.4.11/20261101/ruby-3.4.11.linux-aarch64.tar.gz")
 
     assert_equal [["linux-x86_64", "20261014"], ["linux-aarch64", "20261101"]],
                  entries.map { |entry| [entry[:platforms].first, entry[:build]] }
   end
 
   def test_skips_an_artifact_whose_sidecar_has_not_arrived
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz", sidecar: false)
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz", sidecar: false)
 
     assert_empty entries
   end
 
   def test_skips_everything_that_is_not_a_ruby_tarball
-    upload("3.4.11/20261014/ruby-3.4.11.arm64_sonoma.asan_ubsan.tar.gz")
-    upload("3.4.11/20261014/ruby-3.4.12.arm64_sonoma.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.macos-aarch64.asan_ubsan.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.12.macos-aarch64.tar.gz")
     upload("3.4.11/20261014/ruby-3.4.11.solaris.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.arm64_sonoma.tar.gz")
     upload("3.4.11/20261014/SHA256SUMS", sidecar: false)
     upload("v1/index.json", sidecar: false)
     upload("alias/ruby/3.4.11.json", sidecar: false)
@@ -100,14 +101,14 @@ class IndexTest < Minitest::Test
 
   def test_sorts_by_version_with_prereleases_first_and_dev_last
     %w[dev 4.1.0 3.4.9 4.1.0-preview1 3.4.11].each do |version|
-      upload("#{version}/20261014/ruby-#{version}.ventura.tar.gz")
+      upload("#{version}/20261014/ruby-#{version}.macos-x86_64.tar.gz")
     end
 
     assert_equal ["3.4.9", "3.4.11", "4.1.0-preview1", "4.1.0", "dev"], entries.map { |entry| entry[:version] }
   end
 
   def test_index_document
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz")
     index = JSON.parse(files["v1/index.json"])
 
     assert_equal 1, index["schema"]
@@ -117,9 +118,9 @@ class IndexTest < Minitest::Test
   end
 
   def test_writes_an_alias_map_for_each_version
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz", sha256: "c" * 64, size: 5)
-    upload("3.4.11/20261101/ruby-3.4.11.arm64_linux.tar.gz")
-    upload("4.1.0-preview1/20261014/ruby-4.1.0-preview1.ventura.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz", sha256: "c" * 64, size: 5)
+    upload("3.4.11/20261101/ruby-3.4.11.linux-aarch64.tar.gz")
+    upload("4.1.0-preview1/20261014/ruby-4.1.0-preview1.macos-x86_64.tar.gz")
 
     assert_equal ["alias/ruby/3.4.11.json", "alias/ruby/4.1.0-preview1.json"], files.keys.grep(/\Aalias/)
 
@@ -130,21 +131,21 @@ class IndexTest < Minitest::Test
     assert_equal ["macos-x86_64", "linux-aarch64"], map["platforms"].keys
     assert_equal({
       "build"    => "20261014",
-      "filename" => "ruby-3.4.11.ventura.tar.gz",
-      "url"      => "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.ventura.tar.gz",
+      "filename" => "ruby-3.4.11.macos-x86_64.tar.gz",
+      "url"      => "https://rv.dev/ruby/3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz",
       "size"     => 5,
       "sha256"   => "c" * 64,
     }, map["platforms"]["macos-x86_64"])
   end
 
   def test_checksum_file_lists_the_indexed_artifacts
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz", sha256: "c" * 64)
-    upload("3.4.11/20261101/ruby-3.4.11.ventura.tar.gz", sha256: "d" * 64)
-    upload("3.4.11/20261014/ruby-3.4.11.arm64_linux.tar.gz", sha256: "e" * 64)
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz", sha256: "c" * 64)
+    upload("3.4.11/20261101/ruby-3.4.11.macos-x86_64.tar.gz", sha256: "d" * 64)
+    upload("3.4.11/20261014/ruby-3.4.11.linux-aarch64.tar.gz", sha256: "e" * 64)
 
     assert_equal <<~SUMS, files["v1/SHA256SUMS"]
-      #{"e" * 64}  ruby-3.4.11.arm64_linux.tar.gz
-      #{"d" * 64}  ruby-3.4.11.ventura.tar.gz
+      #{"e" * 64}  ruby-3.4.11.linux-aarch64.tar.gz
+      #{"d" * 64}  ruby-3.4.11.macos-x86_64.tar.gz
     SUMS
   end
 
@@ -154,8 +155,8 @@ class IndexTest < Minitest::Test
 
   # Runs against a stand-in for the aws CLI that serves a bucket from a directory.
   def test_run_writes_the_index_and_prints_what_to_purge
-    upload("3.4.11/20261014/ruby-3.4.11.ventura.tar.gz")
-    upload("4.0.7/20261014/ruby-4.0.7.ventura.tar.gz")
+    upload("3.4.11/20261014/ruby-3.4.11.macos-x86_64.tar.gz")
+    upload("4.0.7/20261014/ruby-4.0.7.macos-x86_64.tar.gz")
 
     Dir.mktmpdir do |dir|
       bucket = File.join(dir, "bucket")

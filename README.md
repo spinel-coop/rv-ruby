@@ -32,7 +32,9 @@ To write the formula yourself, run `bin/rv-bump write`. Run `test/rv-bump-test` 
 [The release workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml) runs whenever a formula or abstract changes on `main`.
 It builds the rubies that were edited, or all of them when an abstract or a portable library changed, and uploads them to the bucket behind `https://rv.dev/ruby`. Each upload is kept under a build id, the date it was built, so a rebuild never replaces an earlier one. A second build on the same day gets an id ending in `-2`.
 
-It then regenerates the index that `rv` reads with `tools/index`, and adds the same files to the [`rubies` release](https://github.com/spinel-coop/rv-ruby/releases/tag/rubies) for versions of `rv` that still install from GitHub.
+A tarball is built with a Homebrew bottle tag in its name, like `ruby-3.4.13.arm64_sonoma.tar.gz`. In the bucket it is named for the platform it runs on instead, like `ruby-3.4.13.macos-aarch64.tar.gz`, which is also what the index calls the platform.
+
+It then regenerates the index that `rv` reads with `tools/index`, and adds the same files to the [`rubies` release](https://github.com/spinel-coop/rv-ruby/releases/tag/rubies) for versions of `rv` that still install from GitHub. Those versions ask for a tarball by the name it was built with, so that release keeps those names.
 
 You can also dispatch the workflow yourself. Set `formula` to build only the rubies whose name contains it.
 

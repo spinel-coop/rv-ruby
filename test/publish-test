@@ -9,17 +9,51 @@ require "tmpdir"
 load File.expand_path("../tools/publish", __dir__)
 
 class PublishTest < Minitest::Test
-  def test_keys
-    assert_equal "3.4.13/20261014/ruby-3.4.13.arm64_sonoma.tar.gz",
+  def test_names_the_platform_the_way_rv_does
+    assert_equal "3.4.13/20261014/ruby-3.4.13.macos-aarch64.tar.gz",
                  Publish.key("ruby-3.4.13.arm64_sonoma.tar.gz", "20261014")
-    assert_equal "4.1.0-preview1/20261014-2/ruby-4.1.0-preview1.x86_64_linux_musl.tar.gz",
+    assert_equal "3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz",
+                 Publish.key("ruby-3.4.13.ventura.tar.gz", "20261014")
+    assert_equal "3.4.13/20261014/ruby-3.4.13.linux-x86_64.tar.gz",
+                 Publish.key("ruby-3.4.13.x86_64_linux.tar.gz", "20261014")
+    assert_equal "3.4.13/20261014/ruby-3.4.13.linux-aarch64.tar.gz",
+                 Publish.key("ruby-3.4.13.arm64_linux.tar.gz", "20261014")
+    assert_equal "3.4.13/20261014/ruby-3.4.13.linux-musl-x86_64.tar.gz",
+                 Publish.key("ruby-3.4.13.x86_64_linux_musl.tar.gz", "20261014")
+    assert_equal "3.4.13/20261014/ruby-3.4.13.linux-musl-aarch64.tar.gz",
+                 Publish.key("ruby-3.4.13.arm64_linux_musl.tar.gz", "20261014")
+  end
+
+  def test_keys_for_prereleases_and_dev
+    assert_equal "4.1.0-preview1/20261014-2/ruby-4.1.0-preview1.linux-musl-x86_64.tar.gz",
                  Publish.key("ruby-4.1.0-preview1.x86_64_linux_musl.tar.gz", "20261014-2")
-    assert_equal "dev/20261014/ruby-dev.ventura.tar.gz", Publish.key("ruby-dev.ventura.tar.gz", "20261014")
+    assert_equal "dev/20261014/ruby-dev.macos-x86_64.tar.gz", Publish.key("ruby-dev.ventura.tar.gz", "20261014")
   end
 
   def test_sanitizer_builds_sit_beside_the_ruby_they_were_built_from
-    assert_equal "4.0.9/20261014/ruby-4.0.9.arm64_sonoma.asan_ubsan.tar.gz",
+    assert_equal "4.0.9/20261014/ruby-4.0.9.macos-aarch64.asan_ubsan.tar.gz",
                  Publish.key("ruby-4.0.9.arm64_sonoma.asan_ubsan.tar.gz", "20261014")
+  end
+
+  def test_refuses_a_tarball_for_a_platform_it_does_not_know
+    assert_raises(SystemExit) { capture_io { Publish.key("ruby-3.4.13.sparc_solaris.tar.gz", "20261014") } }
+  end
+
+  def test_release_sums_use_the_names_the_tarballs_were_built_with
+    sums = <<~SUMS
+      #{"a" * 64}  jruby-bin-10.1.2.0.tar.gz
+      #{"b" * 64}  ruby-3.4.13.linux-musl-x86_64.tar.gz
+      #{"c" * 64}  ruby-3.4.13.linux-x86_64.tar.gz
+      #{"d" * 64}  ruby-4.1.0-preview1.macos-aarch64.tar.gz
+      #{"e" * 64}  ruby-dev.macos-x86_64.tar.gz
+      #{"f" * 64}  rubyinstaller-3.4.11-1-x64.7z
+    SUMS
+
+    assert_equal <<~SUMS, Publish.release_sums(sums)
+      #{"b" * 64}  ruby-3.4.13.x86_64_linux_musl.tar.gz
+      #{"c" * 64}  ruby-3.4.13.x86_64_linux.tar.gz
+      #{"d" * 64}  ruby-4.1.0-preview1.arm64_sonoma.tar.gz
+    SUMS
   end
 
   def test_build_id_is_the_date
@@ -27,7 +61,7 @@ class PublishTest < Minitest::Test
   end
 
   def test_build_id_counts_up_when_the_date_is_taken
-    keys = ["3.4.13/20261014/ruby-3.4.13.ventura.tar.gz", "3.4.13/20261014-2/ruby-3.4.13.ventura.tar.gz"]
+    keys = ["3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz", "3.4.13/20261014-2/ruby-3.4.13.macos-x86_64.tar.gz"]
 
     assert_equal "20261014-3", Publish.build_id("20261014", ["ruby-3.4.13.ventura.tar.gz"], keys)
   end
@@ -35,11 +69,13 @@ class PublishTest < Minitest::Test
   def test_one_taken_tarball_moves_the_whole_run
     filenames = ["ruby-3.4.13.ventura.tar.gz", "ruby-4.0.10.ventura.tar.gz"]
 
-    assert_equal "20261014-2", Publish.build_id("20261014", filenames, ["4.0.10/20261014/ruby-4.0.10.ventura.tar.gz"])
+    keys = ["4.0.10/20261014/ruby-4.0.10.macos-x86_64.tar.gz"]
+
+    assert_equal "20261014-2", Publish.build_id("20261014", filenames, keys)
   end
 
   def test_build_id_ignores_other_rubies_and_platforms
-    keys = ["3.4.13/20261014/ruby-3.4.13.arm64_linux.tar.gz", "3.4.12/20261014/ruby-3.4.12.ventura.tar.gz"]
+    keys = ["3.4.13/20261014/ruby-3.4.13.linux-aarch64.tar.gz", "3.4.12/20261014/ruby-3.4.12.macos-x86_64.tar.gz"]
 
     assert_equal "20261014", Publish.build_id("20261014", ["ruby-3.4.13.ventura.tar.gz"], keys)
   end
@@ -51,7 +87,7 @@ class PublishTest < Minitest::Test
       FileUtils.mkdir_p([rubies, File.join(dir, "bucket/3.4.13/20261014")])
       File.write(File.join(rubies, "ruby-3.4.13.ventura.tar.gz"), "a ruby")
       File.write(File.join(rubies, "ruby-3.4.13.ventura.json"), "{}")
-      File.write(File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.ventura.tar.gz"), "an older ruby")
+      File.write(File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz"), "an older ruby")
       File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
         #!/bin/sh
         cd "#{dir}/bucket"
@@ -65,15 +101,17 @@ class PublishTest < Minitest::Test
       build = publish(dir, "build", "--date=20261014", rubies).chomp
 
       assert_equal "20261014-2", build
-      assert_equal "3.4.13/20261014-2/ruby-3.4.13.ventura.tar.gz\n",
+      assert_equal "3.4.13/20261014-2/ruby-3.4.13.macos-x86_64.tar.gz\n",
                    publish(dir, "upload", "--build=#{build}", rubies)
 
-      uploaded = File.join(dir, "bucket/3.4.13/20261014-2/ruby-3.4.13.ventura.tar.gz")
+      uploaded = File.join(dir, "bucket/3.4.13/20261014-2/ruby-3.4.13.macos-x86_64.tar.gz")
 
       assert_equal "a ruby", File.read(uploaded)
-      assert_equal "#{Digest::SHA256.hexdigest("a ruby")}  ruby-3.4.13.ventura.tar.gz\n",
+      assert_equal "#{Digest::SHA256.hexdigest("a ruby")}  ruby-3.4.13.macos-x86_64.tar.gz\n",
                    File.read("#{uploaded}.sha256")
-      assert_equal "an older ruby", File.read(File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.ventura.tar.gz"))
+      older = File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz")
+
+      assert_equal "an older ruby", File.read(older)
     end
   end
 
