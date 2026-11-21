@@ -68,6 +68,16 @@ brew pr-upload --upload-only --root-url=https://github.com/spinel-coop/rv-ruby/r
 where `$VERSION` is the new package version.
 </details>
 
+## Rubies from other projects
+
+`rv` also installs [RubyInstaller2](https://github.com/oneclick/rubyinstaller2)'s builds on Windows, and [JRuby](https://github.com/jruby/jruby). Every hour, the [mirror workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/mirror.yml) copies any new release of either into the bucket with `tools/mirror`, exactly as upstream published it. RubyInstaller2's build of Ruby's master branch is mirrored as `dev`, each time it is replaced.
+
+Run `tools/mirror --bucket=rv-ruby --dry-run` to see what it would copy.
+
+## Old builds
+
+Every build that was ever published stays in the bucket until `tools/gc` removes it. A build can go 90 days after a newer one replaced it, which leaves time to roll back to it. The [weekly workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/gc.yml) only lists those builds. To delete them, dispatch it with `delete` checked.
+
 ## Thanks
 
 Thanks to the [Homebrew](https://brew.sh) team for the [portable-ruby](https://github.com/Homebrew/homebrew-portable-ruby) code we used as a starting point.
