@@ -21,6 +21,12 @@ Ruby 3.4 and later can also be built with AddressSanitizer and UndefinedBehavior
 - On macOS, the ASan runtime is shipped in `lib/` next to Ruby.
 - Native gems are compiled with the sanitizer flags, which needs clang 18 or later. On Linux any `clang` on `PATH` works. On macOS it must be Homebrew's (`brew install llvm`), because Apple clang's ASan instrumentation is incompatible with the LLVM runtime.
 
+## How are new Ruby versions added
+
+Every day, the [bump workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/bump.yml) checks ruby-lang.org for new releases and opens a pull request with a formula for each one. The pull request merges on its own once the new Ruby builds on every platform. If a build fails, it stays open until someone fixes or closes it.
+
+To write the formula yourself, run `bin/rv-bump write`. Run `test/rv-bump-test` after changing `bin/rv-bump`.
+
 ## How do I issue a new release
 
 [An automated release workflow is available to use](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml).
