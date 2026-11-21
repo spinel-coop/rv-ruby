@@ -29,8 +29,12 @@ To write the formula yourself, run `bin/rv-bump write`. Run `test/rv-bump-test` 
 
 ## How do I issue a new release
 
-[An automated release workflow is available to use](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml).
-Dispatch the workflow and all steps of building, tagging and uploading should be handled automatically.
+[The release workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml) runs whenever a formula or abstract changes on `main`.
+It rebuilds every Ruby, then tags and uploads them as a release named for the date. A second release on the same day gets a tag ending in `-2`.
+
+A release that fails partway leaves its tag behind as a prerelease, and the next run takes the next number. Delete the leftover with `gh release delete <tag> --cleanup-tag`.
+
+You can also dispatch the workflow yourself.
 
 <details>
 <summary>Manual steps are documented below.</summary>
