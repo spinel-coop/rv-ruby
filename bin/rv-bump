@@ -1,0 +1,126 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "open-uri"
+require "optparse"
+
+# Finds Ruby releases on ruby-lang.org that have no formula yet.
+#
+#   bin/rv-bump list     print the missing versions as JSON
+#   bin/rv-bump write    write a formula for each one, and print what was written
+#
+# Only the newest release of each minor counts, and only for minors we already
+# build or minors newer than all of them. Older lines are never backfilled.
+module RvBump
+  INDEX_URL = "https://cache.ruby-lang.org/pub/ruby/index.txt"
+  VERSION = /\A\d+\.\d+\.\d+(-(preview|rc)\d+)?\z/
+
+  Release = Struct.new(:version, :url, :sha256)
+
+  module_function
+
+  def run(argv, out: $stdout)
+    options = { index: INDEX_URL, root: "." }
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: rv-bump list|write [options]"
+      opts.on("--index=FILE", "index.txt to read, as a path or URL")
+      opts.on("--root=DIR", "tap root containing Formula/ and Abstract/")
+      opts.on("--only=VERSION", "only consider this version")
+      opts.on("--dry-run", "with write, print without writing")
+    end
+    command, = parser.parse(argv, into: options)
+    abort parser.help unless ["list", "write"].include?(command)
+
+    root = options[:root]
+    releases = missing(releases(read(options[:index])), formula_versions(root))
+    releases.select! { |release| release.version == options[:only] } if options[:only]
+    bumps = releases.map { |release| bump(release, root) }
+
+    if command == "write" && !options[:"dry-run"]
+      bumps.each { |bump| File.write(File.join(root, bump[:path]), formula(bump)) }
+    end
+
+    out.puts JSON.generate(bumps) if command == "list" || bumps.any?
+  end
+
+  def read(index)
+    index.start_with?("http") ? URI.parse(index).read : File.read(index)
+  end
+
+  # Rows are name, url, sha1, sha256, sha512. Every formula builds from the .tar.gz.
+  def releases(index)
+    index.each_line.filter_map do |line|
+      name, url, _sha1, sha256 = line.chomp.split("\t")
+      next unless url&.end_with?(".tar.gz")
+
+      version = name.delete_prefix("ruby-")
+      Release.new(version, url, sha256) if version.match?(VERSION)
+    end
+  end
+
+  def formula_versions(root)
+    Dir.glob("Formula/rv-ruby@*.rb", base: root).filter_map do |path|
+      version = File.basename(path, ".rb").delete_prefix("rv-ruby@")
+      version if version.match?(VERSION)
+    end
+  end
+
+  def missing(releases, formula_versions)
+    built = formula_versions.group_by { |version| minor(version) }
+                            .transform_values { |versions| versions.map { |version| order(version) }.max }
+    highest = built.keys.max
+
+    newest = releases.group_by { |release| minor(release.version) }.filter_map do |minor, in_minor|
+      next if built[minor].nil? && highest && (minor <=> highest).negative?
+
+      newest = in_minor.max_by { |release| order(release.version) }
+      newest if built[minor].nil? || order(newest.version) > built[minor]
+    end
+    newest.sort_by { |release| order(release.version) }
+  end
+
+  def minor(version)
+    version.split(".").first(2).map(&:to_i)
+  end
+
+  # Gem::Version reads "4.1.0-preview1" as a prerelease of 4.1.0.
+  def order(version)
+    Gem::Version.new(version)
+  end
+
+  def bump(release, root)
+    abstract = "Abstract/rv-ruby-#{minor(release.version).join}.rb"
+    abstract = "Abstract/rv-ruby.rb" unless File.exist?(File.join(root, abstract))
+
+    {
+      version:  release.version,
+      path:     "Formula/rv-ruby@#{release.version}.rb",
+      abstract: abstract,
+      url:      release.url,
+      sha256:   release.sha256,
+    }
+  end
+
+  # Homebrew can't infer a dashed version from the URL, so prereleases spell it out.
+  def formula(bump)
+    abstract = File.basename(bump[:abstract], ".rb")
+    version = %Q(\n  version "#{bump[:version]}") if bump[:version].include?("-")
+
+    <<~RUBY
+      require File.expand_path("../Abstract/#{abstract}", __dir__)
+
+      class #{class_name(bump[:version])} < #{abstract.split("-").map(&:capitalize).join}
+        url "#{bump[:url]}"
+        sha256 "#{bump[:sha256]}"#{version}
+      end
+    RUBY
+  end
+
+  def class_name(version)
+    number, prerelease = version.split("-")
+    "RvRubyAT#{number.delete(".")}#{prerelease&.capitalize}"
+  end
+end
+
+RvBump.run(ARGV) if $PROGRAM_NAME == __FILE__
