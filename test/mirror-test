@@ -1,0 +1,184 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "minitest/autorun"
+require "digest"
+require "fileutils"
+require "json"
+require "stringio"
+require "tmpdir"
+
+load File.expand_path("../tools/mirror", __dir__)
+
+class MirrorTest < Minitest::Test
+  def asset(name, digest: "a" * 64, updated_at: "2026-10-18T09:00:00Z", url: "https://example.com/#{name}")
+    { name: name, browser_download_url: url, digest: digest && "sha256:#{digest}", updated_at: updated_at }
+  end
+
+  def release(published_at, *assets, draft: false)
+    { published_at: published_at, draft: draft, assets: assets }
+  end
+
+  def archives(*releases)
+    Mirror.archives(releases)
+  end
+
+  def test_takes_the_rubyinstaller_archives_rv_installs
+    found = archives(release("2026-10-18T21:04:07Z",
+                             asset("rubyinstaller-3.4.11-1-x64.7z"),
+                             asset("rubyinstaller-3.4.11-1-arm.7z"),
+                             asset("rubyinstaller-3.4.11-1-x86.7z"),
+                             asset("rubyinstaller-3.4.11-1-x64.7z.asc"),
+                             asset("rubyinstaller-3.4.11-1-x64.exe"),
+                             asset("rubyinstaller-devkit-3.4.11-1-x64.7z")))
+
+    assert_equal [["3.4.11", "rubyinstaller-3.4.11-1-x64.7z"], ["3.4.11", "rubyinstaller-3.4.11-1-arm.7z"]],
+                 found.map { |archive| [archive.directory, archive.filename] }
+    assert_equal ["2026-10-18"], found.map(&:released_at).uniq
+    assert_equal "a" * 64, found.first.sha256
+  end
+
+  def test_takes_the_jruby_archives_rv_installs
+    found = archives(release("2026-10-15T16:46:09Z",
+                             asset("jruby-bin-10.1.2.0.tar.gz"),
+                             asset("jruby-bin-10.1.2.0.zip"),
+                             asset("jruby-src-10.1.2.0.tar.gz"),
+                             asset("jruby-complete-10.1.2.0.jar")))
+
+    assert_equal [["jruby/10.1.2.0", "jruby-bin-10.1.2.0.tar.gz"], ["jruby/10.1.2.0", "jruby-bin-10.1.2.0.zip"]],
+                 found.map { |archive| [archive.directory, archive.filename] }
+  end
+
+  # The head release dates from 2021, and its archives are replaced every day.
+  def test_the_head_build_is_dev_as_of_the_day_it_was_uploaded
+    found = archives(release("2021-01-05T12:51:04Z",
+                             asset("rubyinstaller-head-x64.7z", updated_at: "2026-11-21T01:49:30Z"),
+                             asset("rubyinstaller-head-x86.7z", updated_at: "2025-11-21T20:53:35Z")))
+
+    assert_equal [["dev", "rubyinstaller-head-x64.7z", "2026-11-21"]],
+                 found.map { |archive| [archive.directory, archive.filename, archive.released_at] }
+  end
+
+  def test_skips_drafts_and_sorts_oldest_first
+    found = archives(release("2026-02-03T00:00:00Z", asset("rubyinstaller-3.4.8-2-x64.7z")),
+                     release("2026-01-10T00:00:00Z", asset("rubyinstaller-3.4.8-1-x64.7z")),
+                     release("2026-03-01T00:00:00Z", asset("rubyinstaller-3.4.9-1-x64.7z"), draft: true))
+
+    assert_equal ["rubyinstaller-3.4.8-1-x64.7z", "rubyinstaller-3.4.8-2-x64.7z"], found.map(&:filename)
+  end
+
+  def test_an_archive_with_no_checksum_from_github
+    found = archives(release("2024-12-25T00:00:00Z", asset("rubyinstaller-3.4.1-1-x64.7z", digest: nil)))
+
+    assert_nil found.first.sha256
+  end
+
+  def test_only_what_is_missing_is_pending
+    found = archives(release("2026-10-18T00:00:00Z",
+                             asset("rubyinstaller-3.4.11-1-x64.7z"),
+                             asset("rubyinstaller-3.4.11-1-arm.7z")))
+    mirrored = { "3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z" => "a" * 64 }
+
+    assert_equal ["rubyinstaller-3.4.11-1-arm.7z"], Mirror.pending(found, mirrored).map(&:filename)
+  end
+
+  def test_an_archive_that_upstream_replaced_is_pending_again
+    head = asset("rubyinstaller-head-x64.7z", digest: "c" * 64, updated_at: "2026-11-21T01:49:30Z")
+    found = archives(release("2021-01-05T00:00:00Z", head))
+    mirrored = {
+      "dev/20261119/rubyinstaller-head-x64.7z" => "a" * 64,
+      "dev/20261120/rubyinstaller-head-x64.7z" => "b" * 64,
+    }
+
+    assert_equal ["rubyinstaller-head-x64.7z"], Mirror.pending(found, mirrored).map(&:filename)
+    assert_empty Mirror.pending(found, mirrored.merge("dev/20261121/rubyinstaller-head-x64.7z" => "c" * 64))
+  end
+
+  def test_only_the_newest_copy_says_whether_an_archive_is_current
+    found = archives(release("2026-10-18T00:00:00Z", asset("rubyinstaller-3.4.11-1-x64.7z", digest: "a" * 64)))
+    mirrored = {
+      "3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z"   => "a" * 64,
+      "3.4.11/20261018.2/rubyinstaller-3.4.11-1-x64.7z" => "b" * 64,
+    }
+
+    assert_equal ["rubyinstaller-3.4.11-1-x64.7z"], Mirror.pending(found, mirrored).map(&:filename)
+  end
+
+  def test_an_archive_with_no_checksum_is_mirrored_once
+    found = archives(release("2024-12-25T00:00:00Z", asset("rubyinstaller-3.4.1-1-x64.7z", digest: nil)))
+
+    assert_equal 1, Mirror.pending(found, {}).size
+    assert_empty Mirror.pending(found, { "3.4.1/20241225/rubyinstaller-3.4.1-1-x64.7z" => "d" * 64 })
+  end
+
+  def test_build_id_is_the_day_upstream_released_it
+    archive = archives(release("2026-10-18T21:04:07Z", asset("rubyinstaller-3.4.11-1-x64.7z"))).first
+
+    assert_equal "20261018", Mirror.build_id(archive, [])
+    assert_equal "20261018", Mirror.build_id(archive, ["3.4.11/20261018/rubyinstaller-3.4.11-1-arm.7z"])
+  end
+
+  def test_build_id_counts_up_when_the_day_is_taken
+    archive = archives(release("2026-10-18T21:04:07Z", asset("rubyinstaller-3.4.11-1-x64.7z"))).first
+    keys = ["3.4.11/20261018/rubyinstaller-3.4.11-1-x64.7z", "3.4.11/20261018.2/rubyinstaller-3.4.11-1-x64.7z"]
+
+    assert_equal "20261018.3", Mirror.build_id(archive, keys)
+  end
+
+  # Runs against a stand-in for the aws CLI that keeps a bucket in a directory, and records its arguments.
+  def test_mirrors_what_is_new
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p([File.join(dir, "bucket/jruby/10.1.2.0/20261015"), File.join(dir, "releases")])
+      File.write(File.join(dir, "bucket/jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.zip.sha256"),
+                 "#{Digest::SHA256.hexdigest("a zip")}  jruby-bin-10.1.2.0.zip\n")
+      File.write(File.join(dir, "jruby.zip"), "a zip")
+      File.write(File.join(dir, "jruby.tar.gz"), "a tarball")
+      zip_url = File.join(dir, "jruby.zip")
+      tarball_url = File.join(dir, "jruby.tar.gz")
+      zip = asset("jruby-bin-10.1.2.0.zip", url: zip_url, digest: Digest::SHA256.hexdigest("a zip"))
+      tarball = asset("jruby-bin-10.1.2.0.tar.gz", url: tarball_url, digest: Digest::SHA256.hexdigest("a tarball"))
+      jruby = release("2026-10-15T16:46:09Z", zip, tarball)
+      File.write(File.join(dir, "releases/jruby.json"), JSON.generate([jruby]))
+      File.write(File.join(dir, "releases/rubyinstaller2.json"), "[]")
+      File.write(File.join(dir, "releases/rubyinstaller-head.json"), JSON.generate(release("2021-01-05T00:00:00Z")))
+      File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
+        #!/bin/sh
+        echo "$@" >> "#{dir}/calls"
+        cd "#{dir}/bucket"
+        case "$1 $2" in
+          "s3 sync") cp -R . "$4" ;;
+          "s3 cp") mkdir -p "$(dirname "${4#s3://rv-ruby/}")" && cp "$3" "${4#s3://rv-ruby/}" ;;
+          *) exit 1 ;;
+        esac
+      SH
+
+      assert_equal "jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz\n", mirror(dir, "--dry-run")
+      refute_path_exists File.join(dir, "bucket/jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz")
+
+      assert_equal "jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz\n", mirror(dir)
+
+      mirrored = File.join(dir, "bucket/jruby/10.1.2.0/20261015/jruby-bin-10.1.2.0.tar.gz")
+      sha256 = Digest::SHA256.hexdigest("a tarball")
+
+      assert_equal "a tarball", File.read(mirrored)
+      assert_equal "#{sha256}  jruby-bin-10.1.2.0.tar.gz\n", File.read("#{mirrored}.sha256")
+      assert_includes File.read(File.join(dir, "calls")),
+                      "--metadata upstream-url=#{dir}/jruby.tar.gz,upstream-sha256=#{sha256}," \
+                      "upstream-released-at=2026-10-15"
+
+      assert_empty mirror(dir)
+    end
+  end
+
+  private
+
+  def mirror(dir, *args)
+    out = StringIO.new
+    path = ENV.fetch("PATH")
+    ENV["PATH"] = "#{dir}:#{path}"
+    Mirror.run(["--bucket=rv-ruby", "--releases=#{dir}/releases", *args], out: out)
+    out.string
+  ensure
+    ENV["PATH"] = path
+  end
+end

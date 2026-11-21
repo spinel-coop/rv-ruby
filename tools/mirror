@@ -1,0 +1,160 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "digest"
+require "json"
+require "open-uri"
+require "open3"
+require "optparse"
+require "tempfile"
+require "tmpdir"
+
+# Copies the rubies that other projects build into the rv.dev/ruby bucket.
+#
+#   tools/mirror --bucket=rv-ruby             mirror what is new, and print its keys
+#   tools/mirror --bucket=rv-ruby --dry-run   print the keys without mirroring anything
+#
+# RubyInstaller2's archives for Windows go beside our own builds, and its build of
+# Ruby's master branch is our dev. JRuby's archives go under jruby/. The bytes are
+# what upstream released, checked against the checksum GitHub lists for them.
+module Mirror
+  RUBYINSTALLER2 = "https://api.github.com/repos/oneclick/rubyinstaller2/releases"
+  RELEASES = {
+    "rubyinstaller2"     => "#{RUBYINSTALLER2}?per_page=100",
+    # Replaced daily, under a release from 2021 that the list above no longer reaches.
+    "rubyinstaller-head" => "#{RUBYINSTALLER2}/tags/rubyinstaller-head",
+    "jruby"              => "https://api.github.com/repos/jruby/jruby/releases?per_page=100",
+  }.freeze
+
+  RUBYINSTALLER = /\Arubyinstaller-(?<version>\d.*)-\d+-(?:x64|arm)\.7z\z/
+  RUBYINSTALLER_HEAD = /\Arubyinstaller-head-(?:x64|arm)\.7z\z/
+  JRUBY = /\Ajruby-bin-(?<version>[\d.]+)\.(?:tar\.gz|zip)\z/
+
+  # An archive upstream, and the directory it is mirrored into: 3.4.11, dev or jruby/10.1.2.0.
+  Archive = Struct.new(:directory, :filename, :url, :sha256, :released_at)
+
+  module_function
+
+  def run(argv, out: $stdout)
+    options = {}
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: mirror --bucket=NAME [options]"
+      opts.on("--bucket=NAME", "bucket to mirror into")
+      opts.on("--releases=DIR", "read the releases from JSON files in DIR, not from GitHub")
+      opts.on("--dry-run", "print what would be mirrored")
+    end
+    parser.parse(argv, into: options)
+    abort parser.help if options[:bucket].nil?
+
+    releases = RELEASES.to_h { |name, url| [name, [read(options[:releases], name, url)].flatten] }
+    archives = archives(releases["rubyinstaller2"] + releases["rubyinstaller-head"] + releases["jruby"])
+
+    Dir.mktmpdir do |current|
+      bucket = options[:bucket]
+      aws("s3", "sync", "s3://#{bucket}", current, "--only-show-errors", "--exclude", "*", "--include", "*.sha256")
+      mirrored = Dir.glob("**/*.sha256", base: current).to_h do |sidecar|
+        [sidecar.delete_suffix(".sha256"), File.read(File.join(current, sidecar)).split.first]
+      end
+
+      pending(archives, mirrored).each do |archive|
+        key = "#{archive.directory}/#{build_id(archive, mirrored.keys)}/#{archive.filename}"
+        mirror(bucket, archive, key) unless options[:"dry-run"]
+        out.puts key
+      end
+    end
+  end
+
+  def read(directory, name, url)
+    return JSON.parse(File.read(File.join(directory, "#{name}.json")), symbolize_names: true) if directory
+
+    headers = { "Accept" => "application/vnd.github+json" }
+    headers["Authorization"] = "Bearer #{ENV.fetch("GITHUB_TOKEN")}" if ENV.key?("GITHUB_TOKEN")
+    JSON.parse(URI.parse(url).read(headers), symbolize_names: true)
+  end
+
+  def aws(*args)
+    output, status = Open3.capture2("aws", *args)
+    abort "aws #{args.join(" ")} failed" unless status.success?
+
+    output
+  end
+
+  # Oldest first, so that when two revisions of a ruby are mirrored at once the later one is the newer upload.
+  def archives(releases)
+    archives = releases.reject { |release| release[:draft] }.flat_map do |release|
+      release[:assets].filter_map do |asset|
+        if (match = RUBYINSTALLER.match(asset[:name]))
+          archive(match[:version], asset, release[:published_at])
+        elsif RUBYINSTALLER_HEAD.match?(asset[:name])
+          archive("dev", asset, asset[:updated_at])
+        elsif (match = JRUBY.match(asset[:name]))
+          archive("jruby/#{match[:version]}", asset, release[:published_at])
+        end
+      end
+    end
+    archives.sort_by(&:released_at)
+  end
+
+  # GitHub lists a checksum for anything uploaded since mid-2025, and nothing for older assets.
+  def archive(directory, asset, released_at)
+    Archive.new(directory, asset[:name], asset[:browser_download_url], asset[:digest]&.delete_prefix("sha256:"),
+                released_at[0, 10])
+  end
+
+  # An archive is mirrored again when upstream replaces it, which is how the head build moves.
+  # Without a checksum from upstream there is no telling, so one copy is enough.
+  def pending(archives, mirrored)
+    archives.reject do |archive|
+      builds = mirrored.keys.select do |key|
+        key.start_with?("#{archive.directory}/") && key.end_with?("/#{archive.filename}")
+      end
+      newest = builds.max_by { |key| build_order(key.split("/")[-2]) }
+      newest && (archive.sha256.nil? || mirrored[newest] == archive.sha256)
+    end
+  end
+
+  def build_order(build)
+    date, ordinal = build.split(".")
+    [date, ordinal.to_i]
+  end
+
+  # The day upstream released the archive, counting up from .2 when that day is taken.
+  def build_id(archive, keys)
+    date = archive.released_at.delete("-")
+    builds = (1..).lazy.map { |n| (n == 1) ? date : "#{date}.#{n}" }
+    builds.find { |build| keys.none?("#{archive.directory}/#{build}/#{archive.filename}") }
+  end
+
+  # The sidecar goes up last: tools/index only lists an archive that has one.
+  def mirror(bucket, archive, key)
+    Tempfile.create("archive") do |file|
+      file.binmode
+      open_url(archive.url) { |upstream| IO.copy_stream(upstream, file) }
+      file.close
+
+      sha256 = Digest::SHA256.file(file.path).hexdigest
+      if archive.sha256 && archive.sha256 != sha256
+        abort "#{archive.url} has the checksum #{sha256}, but GitHub lists #{archive.sha256}"
+      end
+
+      metadata = "upstream-url=#{archive.url},upstream-sha256=#{sha256},upstream-released-at=#{archive.released_at}"
+      aws("s3", "cp", file.path, "s3://#{bucket}/#{key}", "--only-show-errors", "--metadata", metadata)
+      upload_sidecar(bucket, key, "#{sha256}  #{archive.filename}\n")
+    end
+  end
+
+  def open_url(url, &)
+    url.start_with?("http") ? URI.parse(url).open(&) : File.open(url, "rb", &)
+  end
+
+  def upload_sidecar(bucket, key, content)
+    Tempfile.create("sha256") do |sidecar|
+      sidecar.write(content)
+      sidecar.close
+      aws("s3", "cp", sidecar.path, "s3://#{bucket}/#{key}.sha256", "--only-show-errors",
+          "--content-type", "text/plain")
+    end
+  end
+end
+
+Mirror.run(ARGV) if $PROGRAM_NAME == __FILE__

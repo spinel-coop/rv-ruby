@@ -35,6 +35,7 @@ jobs:
       - run: bin/rv-bump write --dry-run --index=test/fixture/index.txt
       - run: test/index-test
       - run: test/publish-test
+      - run: test/mirror-test
 
   list_edited_formulas:
     runs-on: ubuntu-latest
