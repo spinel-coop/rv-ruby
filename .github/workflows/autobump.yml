@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       formulae:
-        description: Custom list of portable-ruby formulae to livecheck and bump if outdated
+        description: Custom list of portable formulae to livecheck and bump if outdated
         required: false
   schedule:
     # Daily at midnight
@@ -20,10 +20,20 @@ permissions:
 
 jobs:
   autobump:
+    if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/homebrew/ubuntu22.04:main
     steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RV_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RV_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # setup-homebrew keeps the token in git's config, so `brew bump` can push its branches.
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
@@ -31,21 +41,27 @@ jobs:
           core: false
           cask: false
           test-bot: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure Git user
         uses: Homebrew/actions/git-user-config@main
         with:
-          username: ${{ (github.event_name == 'workflow_dispatch' && github.actor) || 'rv-bot' }}
+          token: ${{ steps.app-token.outputs.token }}
+          username: ${{ (github.event_name == 'workflow_dispatch' && github.actor) || format('{0}[bot]', steps.app-token.outputs.app-slug) }}
 
-      - name: Get list of autobump portable-ruby formulae
+      # New rubies come from bump.yml, so only the libraries they are built with are bumped here.
+      - name: Get list of autobump portable formulae
         id: autobump
-        run: echo "autobump_list=$(brew tap-info --json "${GITHUB_REPOSITORY}" | jq -r '.[].formula_names|join(" ")')" >> "$GITHUB_OUTPUT"
+        env:
+          TAP_PATH: ${{ steps.set-up-homebrew.outputs.repository-path }}
+        run: echo "autobump_list=$(basename -s .rb "$TAP_PATH"/Formula/rv-portable-*.rb | xargs)" >> "$GITHUB_OUTPUT"
 
-      - name: Bump portable-ruby formulae
+      - name: Bump portable formulae
         uses: Homebrew/actions/bump-packages@main
         continue-on-error: true
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
+          fork: false
           formulae: ${{ github.event.inputs.formulae || steps.autobump.outputs.autobump_list }}
         env:
           HOMEBREW_TEST_BOT_AUTOBUMP: 1
