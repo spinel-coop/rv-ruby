@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   setup:
-    # rv-ruby-dev mirrors this repo, and only ever releases rv-ruby-dev
+    # rv-ruby-dev was a mirror of this repo, and must not release anything of its own
     if: ${{ github.event_name != 'push' || github.repository == 'spinel-coop/rv-ruby' }}
     runs-on: ubuntu-latest
     outputs:
@@ -276,6 +276,26 @@ jobs:
           if (( ${#files[@]} > 0 )); then
             gh release upload rubies "${files[@]}" index/v1/SHA256SUMS --clobber
           fi
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: dev-app-token
+        if: ${{ hashFiles('rubies/ruby-dev.*.tar.gz') != '' }}
+        with:
+          client-id: ${{ secrets.RV_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RV_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: rv-ruby-dev
+          permission-contents: write
+
+      # Those versions of rv install dev from the latest release of rv-ruby-dev, which stays where it is
+      - name: Add ruby-dev to the rv-ruby-dev release
+        if: ${{ hashFiles('rubies/ruby-dev.*.tar.gz') != '' }}
+        env:
+          GITHUB_TOKEN: ${{ steps.dev-app-token.outputs.token }}
+          DEV_REPOSITORY: ${{ github.repository_owner }}/rv-ruby-dev
+        run: |
+          tag=$(gh release view --repo "$DEV_REPOSITORY" --json tagName --jq .tagName)
+          gh release upload "$tag" rubies/ruby-dev.*.tar.gz --repo "$DEV_REPOSITORY" --clobber
 
       - name: Generate release artifact provenance attestations
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
