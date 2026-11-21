@@ -223,40 +223,16 @@ jobs:
           tools/publish upload --bucket="$BUCKET" --build="$BUILD" rubies
           aws s3 cp rubies/SHA256SUMS "s3://$BUCKET/runs/$GITHUB_RUN_ID/SHA256SUMS" --only-show-errors --content-type text/plain
 
-      - name: Generate the index
-        id: index
+      # The rubies are already up, so a failure here leaves the old index in place
+      - name: Publish the index
+        uses: $/.github/actions/publish-index
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
-        run: |
-          surrogate_keys=$(tools/index --bucket="$BUCKET" --out=index)
-          echo "surrogate_keys=$surrogate_keys" >> "$GITHUB_OUTPUT"
-          pipx run check-jsonschema==0.39.0 --schemafile tools/schema/index.json index/v1/index.json
-          pipx run check-jsonschema==0.39.0 --schemafile tools/schema/alias.json index/alias/*/*.json
-
-      # The rubies are already up, so a failure before this step leaves the old index in place
-      - name: Upload the index
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.RV_RUBY_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.RV_RUBY_SECRET_ACCESS_KEY }}
-        run: |
-          # keep the index we are replacing, so it can be put back by hand. There is none the first time.
-          aws s3 cp "s3://$BUCKET/v1/index.json" index/v1/index.json.prev --only-show-errors || true
-          aws s3 cp index "s3://$BUCKET" --recursive --only-show-errors --exclude v1/SHA256SUMS --content-type application/json
-          aws s3 cp index/v1/SHA256SUMS "s3://$BUCKET/v1/SHA256SUMS" --only-show-errors --content-type text/plain
-
-      - name: Purge the index and the alias maps that changed
-        env:
-          FASTLY_API_TOKEN: ${{ secrets.FASTLY_API_TOKEN }}
-          FASTLY_SERVICE_ID: ${{ vars.FASTLY_SERVICE_ID }}
-          SURROGATE_KEYS: ${{ steps.index.outputs.surrogate_keys }}
-        run: |
-          # Fastly takes up to 256 keys in a request
-          echo "$SURROGATE_KEYS" | jq --raw-output 'range(0; length; 256) as $i | .[$i:$i + 256] | join(" ")' | while read -r keys; do
-            curl --fail --silent --show-error --request POST \
-              --header "Fastly-Key: $FASTLY_API_TOKEN" --header "Surrogate-Key: $keys" \
-              "https://api.fastly.com/service/$FASTLY_SERVICE_ID/purge"
-          done
+        with:
+          bucket: ${{ env.BUCKET }}
+          fastly-api-token: ${{ secrets.FASTLY_API_TOKEN }}
+          fastly-service-id: ${{ vars.FASTLY_SERVICE_ID }}
 
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
