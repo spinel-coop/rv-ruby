@@ -1,0 +1,143 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "minitest/autorun"
+require "fileutils"
+require "json"
+require "stringio"
+require "tmpdir"
+
+load File.expand_path("../bin/rv-bump", __dir__)
+
+class RvBumpTest < Minitest::Test
+  INDEX = File.expand_path("fixture/index.txt", __dir__).freeze
+
+  # The fixture index holds 3.1.7, 3.3.9, 3.4.7, 3.4.8, 3.5.0-preview1,
+  # 4.0.0-preview2, 4.0.0-preview3, 4.0.0 and 4.1.0-preview1.
+  def setup
+    @root = Dir.mktmpdir
+    FileUtils.mkdir_p([File.join(@root, "Formula"), File.join(@root, "Abstract")])
+    ["rv-ruby", "rv-ruby-33", "rv-ruby-34"].each { |name| FileUtils.touch(File.join(@root, "Abstract/#{name}.rb")) }
+    ["rv-ruby@3.3.9", "rv-ruby@3.4.7", "rv-ruby@4.0.0-preview2", "rv-ruby@0.49", "rv-ruby-dev"].each do |name|
+      FileUtils.touch(File.join(@root, "Formula/#{name}.rb"))
+    end
+  end
+
+  def teardown
+    FileUtils.rm_rf(@root)
+  end
+
+  def rv_bump(*args)
+    out = StringIO.new
+    RvBump.run([*args, "--index=#{INDEX}", "--root=#{@root}"], out: out)
+    out.string
+  end
+
+  def list(*args)
+    JSON.parse(rv_bump("list", *args))
+  end
+
+  def test_lists_the_newest_release_of_each_eligible_minor
+    assert_equal ["3.4.8", "4.0.0", "4.1.0-preview1"], list.map { |bump| bump["version"] }
+  end
+
+  def test_skips_minors_older_than_any_we_build
+    refute_includes list.map { |bump| bump["version"] }, "3.1.7"
+  end
+
+  def test_skips_missing_minors_below_the_highest
+    refute_includes list.map { |bump| bump["version"] }, "3.5.0-preview1"
+  end
+
+  def test_lists_every_minor_when_there_are_no_formulae
+    FileUtils.rm_rf(Dir.glob(File.join(@root, "Formula/*")))
+
+    assert_equal ["3.1.7", "3.3.9", "3.4.8", "3.5.0-preview1", "4.0.0", "4.1.0-preview1"],
+                 list.map { |bump| bump["version"] }
+  end
+
+  def test_takes_url_and_sha256_from_the_tar_gz_row
+    bump = list.find { |b| b["version"] == "3.4.8" }
+
+    assert_equal "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.8.tar.gz", bump["url"]
+    assert_equal sha256_for("3.4.8"), bump["sha256"]
+    assert_equal "Formula/rv-ruby@3.4.8.rb", bump["path"]
+  end
+
+  def test_uses_the_minor_abstract_when_there_is_one
+    abstracts = list.to_h { |bump| [bump["version"], bump["abstract"]] }
+
+    assert_equal "Abstract/rv-ruby-34.rb", abstracts["3.4.8"]
+    assert_equal "Abstract/rv-ruby.rb", abstracts["4.0.0"]
+  end
+
+  def test_class_names
+    assert_equal "RvRubyAT3411", RvBump.class_name("3.4.11")
+    assert_equal "RvRubyAT410Preview1", RvBump.class_name("4.1.0-preview1")
+    assert_equal "RvRubyAT400Rc1", RvBump.class_name("4.0.0-rc1")
+  end
+
+  def test_orders_prereleases_before_their_stable
+    versions = ["4.0.0", "4.0.0-rc1", "4.0.0-preview10", "4.0.0-preview2"]
+
+    assert_equal ["4.0.0-preview2", "4.0.0-preview10", "4.0.0-rc1", "4.0.0"],
+                 versions.sort_by { |version| RvBump.order(version) }
+  end
+
+  def test_writes_a_formula
+    rv_bump("write")
+
+    assert_equal <<~RUBY, File.read(File.join(@root, "Formula/rv-ruby@3.4.8.rb"))
+      require File.expand_path("../Abstract/rv-ruby-34", __dir__)
+
+      class RvRubyAT348 < RvRuby34
+        url "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.8.tar.gz"
+        sha256 "#{sha256_for("3.4.8")}"
+      end
+    RUBY
+  end
+
+  def test_writes_a_version_line_for_prereleases
+    rv_bump("write")
+
+    assert_equal <<~RUBY, File.read(File.join(@root, "Formula/rv-ruby@4.1.0-preview1.rb"))
+      require File.expand_path("../Abstract/rv-ruby", __dir__)
+
+      class RvRubyAT410Preview1 < RvRuby
+        url "https://cache.ruby-lang.org/pub/ruby/4.1/ruby-4.1.0-preview1.tar.gz"
+        sha256 "#{sha256_for("4.1.0-preview1")}"
+        version "4.1.0-preview1"
+      end
+    RUBY
+  end
+
+  def test_write_prints_what_it_wrote
+    written = JSON.parse(rv_bump("write"))
+
+    assert_equal ["3.4.8", "4.0.0", "4.1.0-preview1"], written.map { |bump| bump["version"] }
+  end
+
+  def test_write_is_idempotent
+    rv_bump("write")
+
+    assert_empty rv_bump("write")
+    assert_empty list
+  end
+
+  def test_dry_run_writes_nothing
+    refute_empty rv_bump("write", "--dry-run")
+    refute_path_exists File.join(@root, "Formula/rv-ruby@3.4.8.rb")
+  end
+
+  def test_only
+    assert_equal ["4.0.0"], list("--only=4.0.0").map { |bump| bump["version"] }
+    assert_empty list("--only=3.1.7")
+  end
+
+  private
+
+  def sha256_for(version)
+    row = File.foreach(INDEX).find { |line| line.start_with?("ruby-#{version}\t") && line.include?(".tar.gz") }
+    row.split("\t")[3]
+  end
+end
