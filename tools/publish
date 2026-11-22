@@ -17,7 +17,9 @@ require "tempfile"
 # filename there names the platform the way rv does, like macos-aarch64, where the
 # tarball as built has a Homebrew bottle tag, like arm64_sonoma.
 # The build id is the date, with -2, -3 and so on when that date is taken, so
-# nothing in the bucket is ever overwritten.
+# nothing in the bucket is ever overwritten. A tarball that is the same as its
+# newest build in the bucket is left out, so running a release again only
+# uploads what the first run didn't.
 module Publish
   # What a platform is called in the name of a tarball as built, and in the bucket.
   PLATFORMS = {
@@ -55,9 +57,14 @@ module Publish
     when "build"
       out.puts build_id(options.fetch(:date), tarballs, keys(options[:bucket]))
     when "upload"
+      keys = keys(options[:bucket])
       tarballs.each do |filename|
-        upload(options[:bucket], File.join(dir, filename), key(filename, options.fetch(:build)))
-        out.puts key(filename, options[:build])
+        path = File.join(dir, filename)
+        key = key(filename, options.fetch(:build))
+        next if published?(options[:bucket], path, newest(key, keys))
+
+        upload(options[:bucket], path, key)
+        out.puts key
       end
     else
       abort parser.help
@@ -98,6 +105,25 @@ module Publish
   def build_id(date, filenames, keys)
     builds = (1..).lazy.map { |n| (n == 1) ? date : "#{date}-#{n}" }
     builds.find { |build| filenames.none? { |filename| keys.include?(key(filename, build)) } }
+  end
+
+  # The newest build of a tarball that finished uploading, which is the one the index lists.
+  def newest(key, keys)
+    version, _, filename = key.split("/")
+    builds = keys.select do |published|
+      published.start_with?("#{version}/") && published.end_with?("/#{filename}") &&
+        keys.include?("#{published}.sha256")
+    end
+    builds.max_by do |published|
+      date, ordinal = published.split("/")[1].split("-")
+      [date, ordinal.to_i]
+    end
+  end
+
+  def published?(bucket, path, newest)
+    return false if newest.nil?
+
+    aws("s3", "cp", "s3://#{bucket}/#{newest}.sha256", "-").split.first == Digest::SHA256.file(path).hexdigest
   end
 
   # The sidecar goes up last: tools/index only lists a tarball that has one.

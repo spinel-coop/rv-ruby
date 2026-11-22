@@ -80,23 +80,27 @@ class PublishTest < Minitest::Test
     assert_equal "20261014", Publish.build_id("20261014", ["ruby-3.4.13.ventura.tar.gz"], keys)
   end
 
-  # Runs against a stand-in for the aws CLI that keeps a bucket in a directory.
+  def test_newest_build_of_a_tarball
+    name = "ruby-3.4.13.macos-x86_64.tar.gz"
+    builds = %w[20261014 20261014-2 20261014-10 20261013-11].map { |build| "3.4.13/#{build}/#{name}" }
+    keys = builds + builds.map { |key| "#{key}.sha256" } + ["3.4.1/20261101/#{name}", "3.4.1/20261101/#{name}.sha256"]
+
+    assert_equal "3.4.13/20261014-10/#{name}", Publish.newest("3.4.13/20261015/#{name}", keys)
+  end
+
+  def test_newest_build_ignores_a_tarball_without_a_sidecar
+    name = "ruby-3.4.13.macos-x86_64.tar.gz"
+    keys = ["3.4.13/20261014/#{name}", "3.4.13/20261014/#{name}.sha256", "3.4.13/20261014-2/#{name}"]
+
+    assert_equal "3.4.13/20261014/#{name}", Publish.newest("3.4.13/20261015/#{name}", keys)
+    assert_nil Publish.newest("3.4.12/20261015/ruby-3.4.12.macos-x86_64.tar.gz", keys)
+  end
+
   def test_build_then_upload
-    Dir.mktmpdir do |dir|
-      rubies = File.join(dir, "rubies")
-      FileUtils.mkdir_p([rubies, File.join(dir, "bucket/3.4.13/20261014")])
+    with_bucket do |dir, rubies|
       File.write(File.join(rubies, "ruby-3.4.13.ventura.tar.gz"), "a ruby")
       File.write(File.join(rubies, "ruby-3.4.13.ventura.json"), "{}")
-      File.write(File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz"), "an older ruby")
-      File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
-        #!/bin/sh
-        cd "#{dir}/bucket"
-        case "$1 $2" in
-          "s3api list-objects-v2") find . -type f | sed "s|^./||" ;;
-          "s3 cp") mkdir -p "$(dirname "${4#s3://rv-ruby/}")" && cp "$3" "${4#s3://rv-ruby/}" ;;
-          *) exit 1 ;;
-        esac
-      SH
+      older = put(dir, "3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz", "an older ruby")
 
       build = publish(dir, "build", "--date=20261014", rubies).chomp
 
@@ -109,9 +113,23 @@ class PublishTest < Minitest::Test
       assert_equal "a ruby", File.read(uploaded)
       assert_equal "#{Digest::SHA256.hexdigest("a ruby")}  ruby-3.4.13.macos-x86_64.tar.gz\n",
                    File.read("#{uploaded}.sha256")
-      older = File.join(dir, "bucket/3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz")
-
       assert_equal "an older ruby", File.read(older)
+    end
+  end
+
+  # A release that is run again has the tarballs of the first run, and the ones that failed to build then.
+  def test_upload_leaves_out_a_tarball_that_is_already_published
+    with_bucket do |dir, rubies|
+      File.write(File.join(rubies, "ruby-3.4.13.ventura.tar.gz"), "a ruby")
+      File.write(File.join(rubies, "ruby-3.4.13.arm64_sonoma.tar.gz"), "another ruby")
+      put(dir, "3.4.13/20261014/ruby-3.4.13.macos-x86_64.tar.gz", "a ruby")
+
+      build = publish(dir, "build", "--date=20261014", rubies).chomp
+
+      assert_equal "20261014-2", build
+      assert_equal "3.4.13/20261014-2/ruby-3.4.13.macos-aarch64.tar.gz\n",
+                   publish(dir, "upload", "--build=#{build}", rubies)
+      refute_path_exists File.join(dir, "bucket/3.4.13/20261014-2/ruby-3.4.13.macos-x86_64.tar.gz")
     end
   end
 
@@ -125,5 +143,38 @@ class PublishTest < Minitest::Test
     out.string
   ensure
     ENV["PATH"] = path
+  end
+
+  # Runs the block against a stand-in for the aws CLI that keeps a bucket in a directory.
+  def with_bucket
+    Dir.mktmpdir do |dir|
+      rubies = File.join(dir, "rubies")
+      FileUtils.mkdir_p([rubies, File.join(dir, "bucket")])
+      File.write(File.join(dir, "aws"), <<~SH, perm: 0755)
+        #!/bin/sh
+        cd "#{dir}/bucket"
+        case "$1 $2" in
+          "s3api list-objects-v2") find . -type f | sed "s|^./||" ;;
+          "s3 cp")
+            if [ "$4" = "-" ]; then
+              cat "${3#s3://rv-ruby/}"
+            else
+              mkdir -p "$(dirname "${4#s3://rv-ruby/}")" && cp "$3" "${4#s3://rv-ruby/}"
+            fi ;;
+          *) exit 1 ;;
+        esac
+      SH
+
+      yield dir, rubies
+    end
+  end
+
+  # Puts a tarball in the bucket the way an upload would have, with its sidecar.
+  def put(dir, key, content)
+    path = File.join(dir, "bucket", key)
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, content)
+    File.write("#{path}.sha256", "#{Digest::SHA256.hexdigest(content)}  #{File.basename(key)}\n")
+    path
   end
 end
