@@ -30,7 +30,7 @@ To write the formula yourself, run `bin/rv-bump write`. Run `test/rv-bump-test` 
 ## How do I issue a new release
 
 [The release workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/release.yml) runs whenever a formula or abstract changes on `main`.
-It builds the rubies that were edited, or all of them when an abstract or a portable library changed, and uploads them to the bucket behind `https://rv.dev/ruby`. Each upload is kept under a build id, the date it was built, so a rebuild never replaces an earlier one. A second build on the same day gets an id ending in `-2`.
+It builds the rubies that were edited, or all of them when an abstract or a portable library changed, and uploads them to the bucket behind `https://rv.dev/ruby`. Each upload is kept under a build id, the date it was built, so a rebuild never replaces an earlier one. A second build on the same day gets an id ending in `-2`. A tarball that is the same as its newest build in the bucket isn't uploaded again, so re-running the failed jobs of a release only uploads the rubies that were missing.
 
 A tarball is built with a Homebrew bottle tag in its name, like `ruby-3.4.13.arm64_sonoma.tar.gz`. In the bucket it is named for the platform it runs on instead, like `ruby-3.4.13.macos-aarch64.tar.gz`, which is also what the index calls the platform.
 
