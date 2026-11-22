@@ -128,8 +128,8 @@ jobs:
 
   release:
     needs: [setup, build-homebrew, build-alpine, build-sanitizers]
-    # build-sanitizers is skipped unless requested
-    if: ${{ !failure() && !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.formulas != '[]' }}
+    # A build that failed doesn't hold back the rubies that were built. The last step fails the job for it.
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.formulas != '[]' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -293,3 +293,9 @@ jobs:
 
       - name: Cleanup
         run: rm -rvf rubies
+
+      - name: Fail if a build failed
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: |
+          echo "::error::A build failed, so this release is missing rubies. Everything that was built is published."
+          exit 1
