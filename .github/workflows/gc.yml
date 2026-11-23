@@ -21,7 +21,7 @@ concurrency:
 jobs:
   gc:
     if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     env:
       BUCKET: rv-ruby
       AWS_REGION: ${{ vars.RV_RUBY_REGION }}

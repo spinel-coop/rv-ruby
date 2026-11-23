@@ -42,7 +42,7 @@ jobs:
   setup:
     # rv-ruby-dev was a mirror of this repo, and must not release anything of its own
     if: ${{ github.event_name != 'push' || github.repository == 'spinel-coop/rv-ruby' }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     outputs:
       formulas: ${{ steps.setup.outputs.formulas }}
       sanitizer_formulas: ${{ steps.setup.outputs.sanitizer_formulas }}
@@ -130,7 +130,7 @@ jobs:
     needs: [setup, build-homebrew, build-alpine, build-sanitizers]
     # A build that failed doesn't hold back the rubies that were built. The last step fails the job for it.
     if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.formulas != '[]' }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     permissions:
       contents: read
       packages: write
