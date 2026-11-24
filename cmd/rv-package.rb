@@ -49,6 +49,7 @@ module Homebrew
       sig { override.void }
       def run
         ENV["HOMEBREW_DEVELOPER"] = "1"
+        ENV["HOMEBREW_RUSTUP_HOME"] = ENV["RUSTUP_HOME"] = (HOMEBREW_TEMP/"rustup").to_s
 
         verbose = []
         verbose << "--verbose" if args.verbose?
