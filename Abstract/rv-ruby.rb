@@ -88,10 +88,10 @@ class RvRuby < Formula
     ENV["RUSTUP_HOME"] = ENV["HOMEBREW_RUSTUP_HOME"] if ENV.key?("HOMEBREW_RUSTUP_HOME")
     if build.with? "zjit"
       ENV["RUSTUP_TOOLCHAIN"] = "1.85"
-      system "rustup", "install", "1.85", "--profile", "minimal" unless system("which", "rustc")
+      system "rustup", "install", "1.85", "--profile", "minimal"
     elsif build.with? "yjit"
       ENV["RUSTUP_TOOLCHAIN"] = "1.58"
-      system "rustup", "install", "1.58", "--profile", "minimal" unless system("which", "rustc")
+      system "rustup", "install", "1.58", "--profile", "minimal"
     end
 
     bundled_gems = File.foreach("gems/bundled_gems").reject do |line|
