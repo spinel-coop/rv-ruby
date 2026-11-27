@@ -50,6 +50,8 @@ module Homebrew
       def run
         ENV["HOMEBREW_DEVELOPER"] = "1"
         ENV["HOMEBREW_RUSTUP_HOME"] = ENV["RUSTUP_HOME"] = (HOMEBREW_TEMP/"rustup").to_s
+        # Keep llvm etc installed for use during ASAN builds
+        ENV["HOMEBREW_NO_AUTOREMOVE"] = "1" if args.with_sanitizers?
 
         verbose = []
         verbose << "--verbose" if args.verbose?
