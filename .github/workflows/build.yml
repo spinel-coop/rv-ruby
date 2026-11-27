@@ -57,6 +57,10 @@ jobs:
             echo SETUP_RUBY_VERSION=${SETUP_RUBY_VERSION} >> $GITHUB_ENV
           fi
 
+      # Anonymous git to github.com gets rate-limited (403) from shared runner IPs
+      - name: Authenticate GitHub git access
+        run: git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
+
       # Static gem extensions typically require the same Ruby version available already
       - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         id: setup-ruby

@@ -148,6 +148,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # Anonymous git to github.com gets rate-limited (403) from shared runner IPs
+      - name: Authenticate GitHub git access
+        run: git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
+
       - name: Install Homebrew
         run: |
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
