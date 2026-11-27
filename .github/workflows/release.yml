@@ -277,15 +277,20 @@ jobs:
           repositories: rv-ruby-dev
           permission-contents: write
 
-      # Those versions of rv install dev from the latest release of rv-ruby-dev, which stays where it is
+      # Those versions of rv install dev from the `daily` release on rv-ruby-dev, which stays where it is
       - name: Add ruby-dev to the rv-ruby-dev release
         if: ${{ hashFiles('rubies/ruby-dev.*.tar.gz') != '' }}
         env:
           GITHUB_TOKEN: ${{ steps.dev-app-token.outputs.token }}
           DEV_REPOSITORY: ${{ github.repository_owner }}/rv-ruby-dev
         run: |
-          tag=$(gh release view --repo "$DEV_REPOSITORY" --json tagName --jq .tagName)
-          gh release upload "$tag" rubies/ruby-dev.*.tar.gz --repo "$DEV_REPOSITORY" --clobber
+          if ! gh release view daily --repo "$DEV_REPOSITORY" >/dev/null 2>&1; then
+            gh release create daily --repo "$DEV_REPOSITORY" --title daily \
+              --notes "Ruby master, built by spinel-coop/rv-ruby's daily workflow."
+          fi
+          gh release upload daily rubies/ruby-dev.*.tar.gz --repo "$DEV_REPOSITORY" --clobber
+          # nothing else in rv-ruby-dev releases anything now, but say which release is latest
+          gh release edit daily --repo "$DEV_REPOSITORY" --latest
 
       - name: Generate release artifact provenance attestations
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
