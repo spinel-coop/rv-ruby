@@ -15,7 +15,7 @@ concurrency:
 jobs:
   mirror:
     if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     permissions:
       contents: read
       actions: read

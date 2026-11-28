@@ -16,14 +16,14 @@ concurrency:
 
 jobs:
   syntax:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     steps:
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@main
       - run: brew test-bot --only-tap-syntax
 
   unit:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,7 +39,7 @@ jobs:
       - run: test/gc-test
 
   list_edited_formulas:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     outputs:
       formulas: ${{ steps.list.outputs.formulas }}
     steps:
@@ -95,7 +95,7 @@ jobs:
   build-edited-formulas:
     needs: [list_edited_formulas, build_edited_formulas, build_edited_formulas_alpine]
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ruby-linux-x86
     steps:
       - name: Result
         env:

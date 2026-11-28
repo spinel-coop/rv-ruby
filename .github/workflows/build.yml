@@ -36,9 +36,9 @@ jobs:
       matrix:
         runner:
           - macos-15-intel # intel
-          - macos-15 # arm
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
+          - namespace-profile-ruby-macos-arm
+          - namespace-profile-ruby-linux-x86
+          - namespace-profile-ruby-linux-arm
       fail-fast: false
     runs-on: ${{ matrix.runner }}
     steps:
@@ -56,6 +56,10 @@ jobs:
           if [[ "$SETUP_RUBY_VERSION" == "3.2."* ]]; then
             echo SETUP_RUBY_VERSION=${SETUP_RUBY_VERSION} >> $GITHUB_ENV
           fi
+
+      # Anonymous git to github.com gets rate-limited (403) from shared runner IPs
+      - name: Authenticate GitHub git access
+        run: git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
 
       # Static gem extensions typically require the same Ruby version available already
       - uses: ruby/setup-ruby@f9c4492e86def3e644ab32a0ef185eda5b0c20d0 # v1.342.0

@@ -32,9 +32,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: namespace-profile-ruby-linux-x86
             arch: x86_64
-          - runner: ubuntu-24.04-arm
+          - runner: namespace-profile-ruby-linux-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
     # Note: we use `docker run` in steps instead of `container:` because

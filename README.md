@@ -40,7 +40,7 @@ You can also dispatch the workflow yourself. Set `formula` to build only the rub
 
 A build that fails doesn't hold back the others. The workflow publishes every ruby that was built, and then fails, so the run is red until the build that failed is fixed and released again.
 
-The [daily workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/daily.yml) publishes `ruby-dev` from Ruby's master branch the same way. It also adds the tarballs to the latest release of [rv-ruby-dev](https://github.com/spinel-coop/rv-ruby-dev), which is where older versions of `rv` look for it.
+The [daily workflow](https://github.com/spinel-coop/rv-ruby/actions/workflows/daily.yml) publishes `ruby-dev` from Ruby's master branch the same way. It also adds the tarballs to the `daily` release of [rv-ruby-dev](https://github.com/spinel-coop/rv-ruby-dev), which is where older versions of `rv` look for it.
 
 The workflow reads the `RV_RUBY_ACCESS_KEY_ID`, `RV_RUBY_SECRET_ACCESS_KEY`, `FASTLY_API_TOKEN`, `RV_BOT_CLIENT_ID` and `RV_BOT_PRIVATE_KEY` secrets, and the `RV_RUBY_REGION` and `FASTLY_SERVICE_ID` variables.
 

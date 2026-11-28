@@ -21,9 +21,7 @@ permissions:
 jobs:
   autobump:
     if: ${{ github.repository == 'spinel-coop/rv-ruby' }}
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/homebrew/ubuntu22.04:main
+    runs-on: namespace-profile-ruby-linux-x86
     steps:
       - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         id: app-token
